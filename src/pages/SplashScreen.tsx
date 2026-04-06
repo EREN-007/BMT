@@ -1,13 +1,17 @@
 import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-function SplashScreen() {
+interface Props {
+  to?: string
+}
+
+function SplashScreen({ to = '/language' }: Props) {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const timer = setTimeout(() => navigate('/language'), 3800)
+    const timer = setTimeout(() => navigate(to), 3800)
     return () => clearTimeout(timer)
-  }, [navigate])
+  }, [navigate, to])
 
   return (
     <div className="lc-root splash-entry">
