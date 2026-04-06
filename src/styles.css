@@ -8,7 +8,6 @@
   --gold:       #FFD700;
   --gold-dark:  #e6b800;
   --navy:       #0a1628;
-  --navy-mid:   #0d1f38;
   --text:       #0f172a;
   --muted:      #475569;
   --bg:         #ffffff;
@@ -33,247 +32,7 @@ body {
 }
 
 /* ============================================================
-   SPLASH SCREEN — Page 1 / Étape 1
-   ============================================================ */
-
-.splash-root {
-  position: fixed;
-  inset: 0;
-  background: linear-gradient(160deg, #060f1e 0%, #0a1628 45%, #071a10 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  animation: splash-fadein 0.6s ease forwards;
-}
-
-@keyframes splash-fadein {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-/* --- Particles --- */
-
-.splash-particles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.splash-particle {
-  position: absolute;
-  bottom: -10px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: rgba(255, 215, 0, 0.6);
-  animation: particle-rise linear infinite;
-}
-
-@keyframes particle-rise {
-  0%   { transform: translateY(0) scale(1);   opacity: 0.8; }
-  80%  { opacity: 0.4; }
-  100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
-}
-
-/* --- Road --- */
-
-.splash-road {
-  position: absolute;
-  bottom: 82px;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.07);
-  overflow: hidden;
-}
-
-.splash-road-dashes {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 200%;
-  height: 100%;
-  background: repeating-linear-gradient(
-    90deg,
-    transparent 0px,
-    transparent 30px,
-    rgba(255, 215, 0, 0.3) 30px,
-    rgba(255, 215, 0, 0.3) 60px
-  );
-  animation: road-scroll 1.2s linear infinite;
-}
-
-@keyframes road-scroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-60px); }
-}
-
-/* --- Bus --- */
-
-.splash-bus-track {
-  position: absolute;
-  bottom: 55px;
-  left: 0;
-  animation: bus-drive 2.2s cubic-bezier(0.4, 0, 0.6, 1) 0.3s both;
-}
-
-@keyframes bus-drive {
-  from { transform: translateX(-260px); }
-  to   { transform: translateX(calc(100vw + 40px)); }
-}
-
-.splash-bus-svg {
-  width: 200px;
-  height: 90px;
-  display: block;
-  filter: drop-shadow(0 8px 20px rgba(255, 215, 0, 0.25));
-}
-
-/* --- Main content --- */
-
-.splash-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  margin-bottom: 80px;
-  text-align: center;
-  padding: 0 24px;
-}
-
-/* Logo BMT • CME */
-
-.splash-logo {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  opacity: 0;
-  animation: logo-in 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) 2.0s forwards;
-}
-
-@keyframes logo-in {
-  from {
-    opacity: 0;
-    transform: scale(0.65) translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-.splash-acronym {
-  font-size: clamp(2.8rem, 12vw, 4.5rem);
-  font-weight: 900;
-  letter-spacing: 6px;
-  color: var(--gold);
-  text-shadow:
-    0 0 40px rgba(255, 215, 0, 0.5),
-    0 0 80px rgba(255, 215, 0, 0.2),
-    0 3px 6px rgba(0, 0, 0, 0.6);
-}
-
-.splash-separator {
-  font-size: 2rem;
-  color: rgba(255, 255, 255, 0.25);
-  font-weight: 300;
-}
-
-/* Divider */
-
-.splash-divider {
-  height: 2px;
-  width: 0;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-  margin: 18px auto;
-  border-radius: 2px;
-  animation: divider-grow 0.6s ease 2.9s forwards;
-}
-
-@keyframes divider-grow {
-  to { width: 220px; }
-}
-
-/* Text lines */
-
-.splash-line {
-  opacity: 0;
-  font-size: clamp(0.85rem, 3.5vw, 1.05rem);
-  font-weight: 500;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-}
-
-.splash-line-en {
-  color: rgba(255, 255, 255, 0.88);
-  animation: line-in 0.7s ease 3.3s forwards;
-}
-
-.splash-line-fr {
-  color: rgba(255, 215, 0, 0.75);
-  animation: line-in 0.7s ease 3.8s forwards;
-  margin-top: 6px;
-}
-
-@keyframes line-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* --- Footer --- */
-
-.splash-footer {
-  position: absolute;
-  bottom: 22px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  opacity: 0;
-  animation: line-in 0.6s ease 4.1s forwards;
-}
-
-.splash-city {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.3);
-  letter-spacing: 3px;
-  text-transform: uppercase;
-}
-
-/* Progress bar */
-
-.splash-progress {
-  width: 120px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.splash-progress-bar {
-  height: 100%;
-  width: 0;
-  background: linear-gradient(90deg, var(--primary), var(--gold));
-  border-radius: 2px;
-  animation: progress-fill 4.8s linear 0s forwards;
-}
-
-@keyframes progress-fill {
-  from { width: 0%; }
-  to   { width: 100%; }
-}
-
-/* ============================================================
-   LANGUAGE CHOICE — Page 2
+   SPLASH / LANGUAGE CHOICE — Fond animé commun (lc-root)
    ============================================================ */
 
 .lc-root {
@@ -281,46 +40,79 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(155deg, #0a1628 0%, #0d2438 55%, #071a10 100%);
+  background: linear-gradient(135deg, #1a4d3a 0%, #2d7a2d 50%, #1a4d3a 100%);
   position: relative;
   overflow: hidden;
 }
 
+/* Halos lumineux en arrière-plan */
 .lc-root::before {
   content: '';
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 25% 75%, rgba(255, 215, 0, 0.08) 0%, transparent 55%),
-    radial-gradient(circle at 75% 25%, rgba(18, 85, 160, 0.12) 0%, transparent 55%);
+    radial-gradient(circle at 30% 70%, rgba(255, 215, 0, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
   pointer-events: none;
 }
 
+/* Carte glassmorphism */
 .lc-container {
   position: relative;
   text-align: center;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 48px 56px;
-  border-radius: 24px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 215, 0, 0.2);
-  max-width: 480px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 40px 60px;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  max-width: 500px;
   width: 90%;
+  overflow: hidden;
 }
 
+/* Halo rotatif derrière la carte */
+.lc-container::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: conic-gradient(
+    from 0deg,
+    transparent,
+    rgba(255, 215, 0, 0.1),
+    transparent,
+    rgba(46, 125, 50, 0.1),
+    transparent
+  );
+  animation: lc-rotate 20s linear infinite;
+  z-index: 0;
+}
+
+@keyframes lc-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Tout le contenu de la carte au-dessus du halo */
+.lc-container > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Titre avec shimmer */
 .lc-title {
-  font-size: clamp(1.6rem, 6vw, 2.2rem);
-  font-weight: 800;
-  margin-bottom: 12px;
-  background: linear-gradient(135deg, var(--gold), #fff 50%, var(--gold));
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  background: linear-gradient(45deg, #FFD700, #ffffff, #2E7D32);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   background-size: 200% 200%;
-  animation: lc-shimmer 4s ease-in-out infinite;
-  letter-spacing: 1px;
+  animation: lc-shimmer 3s ease-in-out infinite;
+  letter-spacing: 0.5px;
 }
 
 @keyframes lc-shimmer {
@@ -328,14 +120,17 @@ body {
   50%       { background-position: 100% 50%; }
 }
 
+/* Sous-titre */
 .lc-subtitle {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 40px;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.88);
   line-height: 1.6;
   font-weight: 400;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+  margin-bottom: 32px;
 }
 
+/* Boutons */
 .lc-buttons {
   display: flex;
   flex-direction: column;
@@ -345,56 +140,171 @@ body {
 
 .lc-btn {
   width: 100%;
-  max-width: 280px;
-  padding: 16px 32px;
-  font-size: 1rem;
+  max-width: 260px;
+  padding: 14px 36px;
+  font-size: 1.05rem;
   font-weight: 700;
   border: none;
   border-radius: 50px;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  letter-spacing: 2px;
   position: relative;
   overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.25s ease;
 }
 
-.lc-btn::after {
+/* Shimmer au survol */
+.lc-btn::before {
   content: '';
   position: absolute;
   top: 0; left: -100%;
   width: 100%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  transition: left 0.45s ease;
 }
 
-.lc-btn:hover::after { left: 100%; }
+.lc-btn:hover::before { left: 100%; }
 
 .lc-btn-en {
-  background: linear-gradient(135deg, var(--primary) 0%, #1a7ac4 100%);
+  background: linear-gradient(135deg, #2E7D32 0%, #4CAF50 50%, #FFD700 100%);
   color: white;
-  box-shadow: 0 6px 24px rgba(18, 85, 160, 0.4);
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(46, 125, 50, 0.3);
 }
 
 .lc-btn-en:hover {
   transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 12px 32px rgba(18, 85, 160, 0.6);
+  box-shadow: 0 14px 32px rgba(255, 215, 0, 0.35);
+  border-color: rgba(255, 215, 0, 0.6);
 }
 
 .lc-btn-fr {
-  background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold) 100%);
-  color: #0a1628;
-  box-shadow: 0 6px 24px rgba(255, 215, 0, 0.3);
+  background: linear-gradient(135deg, #FFD700 0%, #ffffff 50%, #2E7D32 100%);
+  color: #1B5E20;
+  border: 2px solid rgba(46, 125, 50, 0.3);
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.25);
 }
 
 .lc-btn-fr:hover {
   transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 12px 32px rgba(255, 215, 0, 0.5);
+  box-shadow: 0 14px 32px rgba(46, 125, 50, 0.4);
+  border-color: rgba(46, 125, 50, 0.6);
+  color: #0D4E14;
+}
+
+/* ============================================================
+   ENTRÉES FLUIDES — Splash (Page 1)
+   ============================================================ */
+
+/* Fond qui fade in au chargement */
+.splash-entry {
+  animation: splash-bg-enter 0.6s ease both;
+}
+
+@keyframes splash-bg-enter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Carte qui monte et apparaît */
+.splash-card-entry {
+  animation: splash-card-enter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+}
+
+@keyframes splash-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Titre qui apparaît après la carte */
+.splash-title-entry {
+  animation:
+    lc-shimmer 3s ease-in-out infinite,
+    splash-fade-up 0.55s ease 0.75s both;
+}
+
+@keyframes splash-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Sous-titre qui suit */
+.splash-subtitle-entry {
+  animation: splash-fade-up 0.55s ease 1.1s both;
+}
+
+/* Barre de progression */
+.splash-progress-wrap {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.splash-progress-entry {
+  animation: splash-fade-up 0.4s ease 1.5s both;
+}
+
+.splash-progress-bar {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #2E7D32, #FFD700);
+  border-radius: 3px;
+  animation: splash-progress-fill 2.3s cubic-bezier(0.4, 0, 0.2, 1) 1.5s both;
+}
+
+@keyframes splash-progress-fill {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+/* ============================================================
+   LANGUAGE CHOICE — Page 2 (entrée depuis splash)
+   ============================================================ */
+
+/* Entrée de la page 2 : fond déjà connu, carte et boutons apparaissent */
+.lc-page2-card {
+  animation: splash-card-enter 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+}
+
+.lc-page2-title {
+  animation:
+    lc-shimmer 3s ease-in-out infinite,
+    splash-fade-up 0.5s ease 0.4s both;
+}
+
+.lc-page2-subtitle {
+  animation: splash-fade-up 0.5s ease 0.65s both;
+}
+
+.lc-page2-buttons {
+  animation: splash-fade-up 0.5s ease 0.85s both;
+}
+
+/* ============================================================
+   RESPONSIVE MOBILE
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .lc-container { padding: 32px 36px; }
+  .lc-title     { font-size: 1.9rem; }
+  .lc-subtitle  { font-size: 0.95rem; }
+  .lc-btn       { max-width: 100%; }
 }
 
 @media (max-width: 480px) {
-  .lc-container { padding: 36px 28px; }
-  .lc-btn { max-width: 100%; }
+  .lc-container { padding: 28px 24px; width: 95%; }
+  .lc-title     { font-size: 1.6rem; }
 }
 
 /* ============================================================
