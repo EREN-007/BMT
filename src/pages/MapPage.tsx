@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   MapContainer,
   TileLayer,
@@ -253,6 +254,7 @@ function SatelliteModal({ position, type, onConfirm, onCancel }: SatModalProps) 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 function MapPage() {
+  const navigate = useNavigate()
   const [activeTool, setActiveTool]     = useState<Tool>('pencil')
   const [activeColor, setActiveColor]   = useState<RouteColor>('#3498db')
   const [isDrawing, setIsDrawing]       = useState(false)
@@ -478,6 +480,14 @@ function MapPage() {
         {activeTool === 'eraser' && (
           <div className="mp-hint">Dernier élément effacé · Changez d'outil pour continuer</div>
         )}
+
+        {/* Bouton Suivant */}
+        <button className="mp-next-btn" onClick={() => navigate('/page4')} title="Page suivante">
+          <span>Suivant</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
       </div>
 
       {/* ── Satellite 3D Modal ── */}

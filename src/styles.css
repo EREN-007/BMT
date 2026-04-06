@@ -398,6 +398,45 @@
   box-shadow: 0 8px 20px rgba(18, 85, 160, 0.5);
 }
 
+/* ── Bouton Suivant ── */
+
+.mp-next-btn {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  background: linear-gradient(135deg, #1255a0, #1a7ac4);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(18, 85, 160, 0.5);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s ease;
+}
+
+.mp-next-btn svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s ease;
+}
+
+.mp-next-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 10px 32px rgba(18, 85, 160, 0.65);
+}
+
+.mp-next-btn:hover svg {
+  transform: translateX(3px);
+}
+
 /* ── Responsive mobile ── */
 @media (max-width: 480px) {
   .mp-toolbar {
