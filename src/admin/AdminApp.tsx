@@ -1,11 +1,15 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import SplashScreen from '@/pages/SplashScreen'
+import SplashScreen   from '@/pages/SplashScreen'
+import LanguageChoice from '@/pages/LanguageChoice'
 
 function AdminApp() {
+  const [lang, setLang] = useState<'en' | 'fr' | null>(null)
+
   return (
     <Routes>
-      <Route path="/"          element={<SplashScreen to="/dashboard" />} />
+      <Route path="/"          element={<SplashScreen to="/language" />} />
+      <Route path="/language"  element={<LanguageChoice onSelect={setLang} to="/dashboard" />} />
       <Route path="/dashboard" element={<AdminDashboardPlaceholder />} />
       <Route path="*"          element={<Navigate to="/" replace />} />
     </Routes>

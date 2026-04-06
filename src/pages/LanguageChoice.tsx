@@ -3,14 +3,15 @@ import { useNavigate } from 'react-router-dom'
 
 interface Props {
   onSelect: (lang: 'en' | 'fr') => void
+  to?: string
 }
 
-function LanguageChoice({ onSelect }: Props) {
+function LanguageChoice({ onSelect, to = '/map' }: Props) {
   const navigate = useNavigate()
 
   const handleSelect = (lang: 'en' | 'fr') => {
     onSelect(lang)
-    navigate('/map')
+    navigate(to)
   }
 
   return (
