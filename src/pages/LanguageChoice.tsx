@@ -10,7 +10,7 @@ function LanguageChoice({ onSelect }: Props) {
 
   const handleSelect = (lang: 'en' | 'fr') => {
     onSelect(lang)
-    navigate('/auth')
+    navigate('/map')
   }
 
   return (

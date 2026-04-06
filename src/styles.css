@@ -3,6 +3,414 @@
    Global Styles
    ============================================================ */
 
+/* ============================================================
+   MAP PAGE — Page 3
+   ============================================================ */
+
+/* Layout racine : plein écran sans scroll */
+.mp-root {
+  display: flex;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: #0a1628;
+}
+
+/* ── Toolbar ── */
+
+.mp-toolbar {
+  position: relative;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 72px;
+  min-width: 72px;
+  background: rgba(10, 22, 40, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 215, 0, 0.15);
+  padding: 12px 8px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.mp-toolbar-brand {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #FFD700;
+  padding: 4px 0 10px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.mp-tool-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 4px;
+}
+
+.mp-tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 52px;
+  padding: 8px 4px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.55);
+  transition: all 0.2s ease;
+}
+
+.mp-tool-btn svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.mp-tool-btn span {
+  font-size: 0.58rem;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.mp-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 215, 0, 0.3);
+  transform: scale(1.04);
+}
+
+.mp-tool-active {
+  background: rgba(255, 215, 0, 0.15) !important;
+  border-color: rgba(255, 215, 0, 0.6) !important;
+  color: #FFD700 !important;
+}
+
+.mp-tool-finish {
+  background: rgba(46, 204, 113, 0.15) !important;
+  border-color: rgba(46, 204, 113, 0.6) !important;
+  color: #2ecc71 !important;
+  animation: finish-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes finish-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.3); }
+  50%       { box-shadow: 0 0 0 5px rgba(46, 204, 113, 0); }
+}
+
+/* Color swatches */
+.mp-colors {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0 2px;
+}
+
+.mp-color-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.mp-color-dot:hover {
+  transform: scale(1.2);
+  border-color: white;
+}
+
+.mp-color-active {
+  border-color: white !important;
+  transform: scale(1.25);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+}
+
+.mp-toolbar-divider {
+  width: 80%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* Stats mini */
+.mp-stats {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
+}
+
+.mp-stats span {
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+/* ── Map container ── */
+
+.mp-map-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.mp-leaflet {
+  width: 100%;
+  height: 100%;
+}
+
+/* Drawing cursor */
+.mp-map-drawing .mp-leaflet {
+  cursor: crosshair !important;
+}
+
+/* ── Hint bar ── */
+
+.mp-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(10, 22, 40, 0.88);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.mp-hint-drawing {
+  border-color: rgba(46, 204, 113, 0.4);
+  color: #b8f5d0;
+}
+
+/* ── Custom marker styles ── */
+
+.mp-stop-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+  transition: transform 0.2s ease;
+}
+
+.mp-stop-icon:hover { transform: scale(1.15); }
+
+.mp-stop-busstop svg  { width: 36px; height: 44px; }
+.mp-stop-station svg  { width: 40px; height: 48px; }
+
+/* ── Satellite Modal ── */
+
+.mp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: mp-modal-in 0.25s ease both;
+}
+
+@keyframes mp-modal-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.mp-modal {
+  background: #0d1f38;
+  border: 1px solid rgba(255, 215, 0, 0.25);
+  border-radius: 18px;
+  width: 100%;
+  max-width: 480px;
+  overflow: hidden;
+  animation: mp-modal-slide 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes mp-modal-slide {
+  from { transform: scale(0.88) translateY(20px); opacity: 0; }
+  to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.mp-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.mp-modal-icon { font-size: 1.8rem; }
+
+.mp-modal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #FFD700;
+  margin: 0;
+}
+
+.mp-modal-coords {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 2px 0 0;
+  font-family: monospace;
+}
+
+/* Satellite map container — légèrement incliné pour effet 3D */
+.mp-modal-map-wrap {
+  position: relative;
+  height: 240px;
+  overflow: hidden;
+}
+
+.mp-modal-map {
+  width: 100%;
+  height: 260px;
+  margin-top: -10px;
+  /* Perspective tilt : simule la vue 3D inclinée */
+  transform: perspective(600px) rotateX(12deg) scale(1.06);
+  transform-origin: bottom center;
+}
+
+.mp-modal-map-label {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 8px;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Pin dans le modal satellite */
+.mp-sat-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  border: 3px solid white;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+}
+
+.mp-sat-pin-bus     { background: #1255a0; }
+.mp-sat-pin-station { background: #e6b800; }
+
+/* Form */
+.mp-modal-form {
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mp-modal-field-label {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.mp-modal-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: white;
+  font-size: 0.95rem;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.mp-modal-input:focus {
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
+.mp-modal-input::placeholder { color: rgba(255,255,255,0.25); }
+
+/* Actions */
+.mp-modal-actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px 18px;
+}
+
+.mp-modal-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+}
+
+.mp-modal-cancel {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.mp-modal-cancel:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.mp-modal-confirm {
+  background: linear-gradient(135deg, #1255a0, #1a7ac4);
+  color: white;
+  box-shadow: 0 4px 16px rgba(18, 85, 160, 0.4);
+}
+
+.mp-modal-confirm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(18, 85, 160, 0.5);
+}
+
+/* ── Responsive mobile ── */
+@media (max-width: 480px) {
+  .mp-toolbar {
+    width: 60px;
+    min-width: 60px;
+    padding: 10px 4px;
+  }
+  .mp-tool-btn { width: 46px; padding: 7px 2px 5px; }
+  .mp-tool-btn svg { width: 20px; height: 20px; }
+  .mp-modal { max-width: 100%; border-radius: 14px; }
+  .mp-modal-map-wrap { height: 200px; }
+}
+
 :root {
   --primary:    #1255a0;
   --gold:       #FFD700;
