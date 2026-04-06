@@ -1647,3 +1647,93 @@ body {
   .db-topbar { padding: 14px 16px; }
   .db-date { display: none; }
 }
+
+/* ============================================================
+   ADMIN MAP PAGE — Carte mère (Page 5 admin)
+   ============================================================ */
+
+/* Légende sidebar */
+.adm-legend {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.adm-legend-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin: 4px 0 2px;
+}
+
+.adm-legend-sep {
+  height: 1px;
+  background: rgba(255,255,255,0.07);
+  margin: 4px 0;
+}
+
+.adm-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.adm-legend-item input[type="checkbox"] {
+  accent-color: #FFD700;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.adm-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.adm-legend-name {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.65);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adm-legend-city {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.25);
+  flex-shrink: 0;
+}
+
+/* Compteurs flottants */
+.adm-map-counters {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+}
+
+.adm-map-counters span {
+  background: rgba(10, 22, 40, 0.88);
+  color: rgba(255,255,255,0.75);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,215,0,0.2);
+  backdrop-filter: blur(6px);
+  letter-spacing: 0.3px;
+}
