@@ -4,7 +4,7 @@ import {
   MapContainer,
   TileLayer,
   Polyline,
-  Marker,
+  CircleMarker,
   Popup,
   LayersControl,
 } from 'react-leaflet'
@@ -12,97 +12,167 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl:       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
 
-// ─── Demo data — routes citoyennes proposées ───────────────────────────────────
+// ─── Density color logic ───────────────────────────────────────────────────────
+// count = nombre de citoyens ayant tracé ce corridor / placé cet arrêt
 
-const DEMO_ROUTES = [
+function densityColor(count: number, max: number): string {
+  const ratio = count / max
+  if (ratio >= 0.65) return '#e74c3c'   // rouge  — très demandé
+  if (ratio >= 0.30) return '#f39c12'   // orange — moyennement demandé
+  return '#ecf0f1'                       // blanc  — peu demandé
+}
+
+function densityWeight(count: number, max: number): number {
+  const ratio = count / max
+  if (ratio >= 0.65) return 9
+  if (ratio >= 0.30) return 6
+  return 3
+}
+
+function densityRadius(count: number, max: number): number {
+  const ratio = count / max
+  if (ratio >= 0.65) return 14
+  if (ratio >= 0.30) return 9
+  return 5
+}
+
+// ─── Corridors de routes ──────────────────────────────────────────────────────
+// Chaque corridor = segment agrégé de toutes les propositions citoyennes
+// `count` = nb de citoyens ayant tracé ce corridor
+
+const CORRIDORS = [
+  // ── ROUGE — corridors très demandés
   {
-    id: 'r1', user: 'Marie Tremblay', ville: 'Moncton', color: '#e74c3c',
+    id: 'c1', label: 'Centre-ville → Champlain Place', count: 38,
     points: [
       [46.0972, -64.7901], [46.0931, -64.7830], [46.0878, -64.7782],
-      [46.0821, -64.7720], [46.0763, -64.7681],
+      [46.0840, -64.7740], [46.0821, -64.7720],
     ] as [number,number][],
   },
   {
-    id: 'r2', user: 'Pierre LeBlanc', ville: 'Dieppe', color: '#3498db',
+    id: 'c2', label: 'Wheeler Blvd — Axe principal', count: 34,
+    points: [
+      [46.1020, -64.7600], [46.0980, -64.7680], [46.0930, -64.7750],
+      [46.0878, -64.7782], [46.0830, -64.7820],
+    ] as [number,number][],
+  },
+  {
+    id: 'c3', label: 'Dieppe — Corridor Acadie', count: 29,
     points: [
       [46.0988, -64.7350], [46.0960, -64.7440], [46.0935, -64.7530],
       [46.0910, -64.7640], [46.0878, -64.7782],
     ] as [number,number][],
   },
+  // ── ORANGE — corridors moyennement demandés
   {
-    id: 'r3', user: 'Sophie Boudreau', ville: 'Riverview', color: '#2ecc71',
+    id: 'c4', label: 'Mountain Rd — Corridor nord', count: 18,
     points: [
-      [46.0562, -64.8022], [46.0620, -64.7950], [46.0690, -64.7870],
-      [46.0763, -64.7780], [46.0821, -64.7720],
+      [46.1080, -64.7820], [46.1040, -64.7790], [46.0998, -64.7760],
+      [46.0960, -64.7740], [46.0920, -64.7720],
     ] as [number,number][],
   },
   {
-    id: 'r4', user: 'Marc Richard', ville: 'Moncton', color: '#f39c12',
+    id: 'c5', label: 'Moncton → Riverview Pont', count: 14,
+    points: [
+      [46.0878, -64.7782], [46.0820, -64.7800], [46.0760, -64.7830],
+      [46.0700, -64.7900], [46.0630, -64.7970],
+    ] as [number,number][],
+  },
+  {
+    id: 'c6', label: 'Dieppe Est — Rue Champlain', count: 12,
+    points: [
+      [46.0940, -64.7200], [46.0960, -64.7300], [46.0970, -64.7400],
+      [46.0975, -64.7480], [46.0970, -64.7560],
+    ] as [number,number][],
+  },
+  {
+    id: 'c7', label: 'Université → Downtown', count: 11,
+    points: [
+      [46.1020, -64.7600], [46.0990, -64.7650], [46.0960, -64.7700],
+      [46.0920, -64.7740], [46.0878, -64.7782],
+    ] as [number,number][],
+  },
+  // ── BLANC — corridors peu demandés
+  {
+    id: 'c8', label: 'Riverview Sud', count: 6,
+    points: [
+      [46.0562, -64.8022], [46.0600, -64.7970], [46.0640, -64.7920],
+      [46.0680, -64.7870], [46.0720, -64.7830],
+    ] as [number,number][],
+  },
+  {
+    id: 'c9', label: 'Moncton Ouest', count: 5,
     points: [
       [46.0878, -64.7782], [46.0850, -64.7900], [46.0820, -64.8020],
       [46.0790, -64.8130], [46.0760, -64.8220],
     ] as [number,number][],
   },
   {
-    id: 'r5', user: 'Éric Goguen', ville: 'Moncton', color: '#9b59b6',
+    id: 'c10', label: 'Dieppe Nord', count: 4,
     points: [
-      [46.1020, -64.7600], [46.0980, -64.7680], [46.0930, -64.7750],
-      [46.0878, -64.7782], [46.0820, -64.7850],
+      [46.1050, -64.7300], [46.1020, -64.7380], [46.0990, -64.7440],
+      [46.0960, -64.7490], [46.0940, -64.7540],
     ] as [number,number][],
   },
 ]
 
-const DEMO_STOPS = [
-  { id: 's1', type: 'busstop',  label: 'Centre-ville Moncton',      pos: [46.0878, -64.7782] as [number,number] },
-  { id: 's2', type: 'busstop',  label: 'Champlain Place',            pos: [46.0821, -64.7720] as [number,number] },
-  { id: 's3', type: 'busstop',  label: 'Dieppe Centre',              pos: [46.0960, -64.7440] as [number,number] },
-  { id: 's4', type: 'busstop',  label: 'Riverview Civic Centre',     pos: [46.0620, -64.7950] as [number,number] },
-  { id: 's5', type: 'busstop',  label: 'Université de Moncton',      pos: [46.1020, -64.7600] as [number,number] },
-  { id: 's6', type: 'busstop',  label: 'Highfield Square',           pos: [46.0931, -64.7830] as [number,number] },
-  { id: 's7', type: 'station',  label: 'Gare centrale Moncton',      pos: [46.0930, -64.7750] as [number,number] },
-  { id: 's8', type: 'station',  label: 'Station Dieppe — Acadie',    pos: [46.0988, -64.7350] as [number,number] },
-  { id: 's9', type: 'station',  label: 'Station Riverview Sud',      pos: [46.0562, -64.8022] as [number,number] },
+// ─── Arrêts de bus ─────────────────────────────────────────────────────────────
+
+const BUS_STOPS = [
+  { id: 'bs1',  label: 'Centre-ville — Main & Highfield',   pos: [46.0878, -64.7782] as [number,number], count: 42 },
+  { id: 'bs2',  label: 'Champlain Place',                    pos: [46.0821, -64.7720] as [number,number], count: 35 },
+  { id: 'bs3',  label: 'Université de Moncton',              pos: [46.1020, -64.7600] as [number,number], count: 30 },
+  { id: 'bs4',  label: 'Dieppe Centre Commercial',           pos: [46.0960, -64.7440] as [number,number], count: 28 },
+  { id: 'bs5',  label: 'Highfield Square',                   pos: [46.0931, -64.7830] as [number,number], count: 22 },
+  { id: 'bs6',  label: 'Wheeler Blvd & Mountain Rd',         pos: [46.0980, -64.7700] as [number,number], count: 18 },
+  { id: 'bs7',  label: 'Riverview Civic Centre',             pos: [46.0620, -64.7950] as [number,number], count: 14 },
+  { id: 'bs8',  label: 'Dieppe Rue Acadie',                  pos: [46.0988, -64.7350] as [number,number], count: 12 },
+  { id: 'bs9',  label: 'Moncton Hospital',                   pos: [46.0960, -64.7740] as [number,number], count: 9  },
+  { id: 'bs10', label: 'Riverview Plaza',                    pos: [46.0562, -64.8022] as [number,number], count: 7  },
+  { id: 'bs11', label: 'Moncton Ouest — Trinity Dr',         pos: [46.0820, -64.8100] as [number,number], count: 5  },
+  { id: 'bs12', label: 'Dieppe Est — Champlain & Amirault',  pos: [46.0940, -64.7200] as [number,number], count: 4  },
 ]
+
+// ─── Stations / Gares ──────────────────────────────────────────────────────────
+
+const STATIONS = [
+  { id: 'st1', label: 'Gare centrale Moncton',         pos: [46.0920, -64.7750] as [number,number], count: 38 },
+  { id: 'st2', label: 'Station Dieppe — Pôle Acadie',  pos: [46.0975, -64.7400] as [number,number], count: 24 },
+  { id: 'st3', label: 'Station Riverview',              pos: [46.0630, -64.7970] as [number,number], count: 15 },
+  { id: 'st4', label: 'Station Université',             pos: [46.1020, -64.7610] as [number,number], count: 11 },
+  { id: 'st5', label: 'Station Moncton Ouest',          pos: [46.0790, -64.8130] as [number,number], count: 6  },
+]
+
+const MAX_ROUTE = Math.max(...CORRIDORS.map(c => c.count))
+const MAX_STOP  = Math.max(...BUS_STOPS.map(s => s.count))
+const MAX_STA   = Math.max(...STATIONS.map(s => s.count))
 
 const MONCTON_CENTER: [number, number] = [46.075, -64.760]
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
+// ─── Density badge ─────────────────────────────────────────────────────────────
 
-const busStopIcon = L.divIcon({
-  html: `<div class="mp-stop-icon mp-stop-busstop"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="18" height="14" rx="3" fill="#1255a0"/><rect x="5" y="4" width="5" height="5" rx="1" fill="white" opacity="0.9"/><rect x="14" y="4" width="5" height="5" rx="1" fill="white" opacity="0.9"/><rect x="3" y="10" width="18" height="3" fill="#FFD700"/><circle cx="7" cy="19" r="3" fill="#1a1a2e"/><circle cx="17" cy="19" r="3" fill="#1a1a2e"/><line x1="12" y1="16" x2="12" y2="22" stroke="#1255a0" stroke-width="2"/></svg></div>`,
-  className: '', iconSize: [36, 44], iconAnchor: [18, 44], popupAnchor: [0, -44],
-})
-
-const stationIcon = L.divIcon({
-  html: `<div class="mp-stop-icon mp-stop-station"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L4 7v13h16V7L12 2z" fill="#e6b800"/><rect x="8" y="12" width="3" height="8" fill="#0a1628"/><rect x="13" y="12" width="3" height="8" fill="#0a1628"/><rect x="6" y="7" width="4" height="4" rx="0.5" fill="white" opacity="0.9"/><rect x="14" y="7" width="4" height="4" rx="0.5" fill="white" opacity="0.9"/><rect x="10" y="7" width="4" height="4" rx="0.5" fill="white" opacity="0.9"/></svg></div>`,
-  className: '', iconSize: [40, 48], iconAnchor: [20, 48], popupAnchor: [0, -48],
-})
+function DensityBadge({ count, max }: { count: number; max: number }) {
+  const color = densityColor(count, max)
+  const label = count / max >= 0.65 ? 'Très demandé' : count / max >= 0.30 ? 'Demandé' : 'Peu demandé'
+  return (
+    <span style={{
+      display: 'inline-block', padding: '1px 8px', borderRadius: 10,
+      background: `${color}22`, color, border: `1px solid ${color}55`,
+      fontSize: '0.75rem', fontWeight: 700,
+    }}>
+      {label}
+    </span>
+  )
+}
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function AdminMapPage() {
   const navigate = useNavigate()
-  const [visibleRoutes, setVisibleRoutes] = useState<Set<string>>(
-    new Set(DEMO_ROUTES.map(r => r.id))
-  )
+  const [showRoutes,   setShowRoutes]   = useState(true)
   const [showStops,    setShowStops]    = useState(true)
   const [showStations, setShowStations] = useState(true)
-
-  const toggleRoute = (id: string) =>
-    setVisibleRoutes(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-
-  const busStops = DEMO_STOPS.filter(s => s.type === 'busstop')
-  const stations = DEMO_STOPS.filter(s => s.type === 'station')
 
   return (
     <div className="db-root">
@@ -117,19 +187,12 @@ function AdminMapPage() {
         <p className="db-sidebar-city">Grand Moncton, NB</p>
 
         <nav className="db-nav">
-          <a className="db-nav-item" onClick={() => navigate('/dashboard')}>
+          <a className="db-nav-item" style={{cursor:'pointer'}} onClick={() => navigate('/dashboard')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
             Dashboard
-          </a>
-          <a className="db-nav-item" onClick={() => navigate('/submissions')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
-              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
-            </svg>
-            Soumissions
           </a>
           <a className="db-nav-item db-nav-active">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -139,49 +202,50 @@ function AdminMapPage() {
             </svg>
             Carte mère
           </a>
-          <a className="db-nav-item" onClick={() => navigate('/users')}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            Utilisateurs
-          </a>
         </nav>
 
-        {/* Légende / filtres */}
+        {/* Légende heatmap */}
         <div className="adm-legend">
-          <p className="adm-legend-title">Lignes proposées</p>
-          {DEMO_ROUTES.map(r => (
-            <label key={r.id} className="adm-legend-item">
-              <input
-                type="checkbox"
-                checked={visibleRoutes.has(r.id)}
-                onChange={() => toggleRoute(r.id)}
-              />
-              <span className="adm-legend-dot" style={{ background: r.color }} />
-              <span className="adm-legend-name">{r.user}</span>
-              <span className="adm-legend-city">{r.ville}</span>
-            </label>
-          ))}
+          <p className="adm-legend-title">Intensité de demande</p>
+
+          <div className="adm-heatmap-legend">
+            <div className="adm-heat-row">
+              <span className="adm-heat-dot" style={{ background: '#e74c3c' }} />
+              <span className="adm-heat-label">Très demandé</span>
+            </div>
+            <div className="adm-heat-row">
+              <span className="adm-heat-dot" style={{ background: '#f39c12' }} />
+              <span className="adm-heat-label">Demandé</span>
+            </div>
+            <div className="adm-heat-row">
+              <span className="adm-heat-dot" style={{ background: '#ecf0f1', border: '1px solid rgba(255,255,255,0.2)' }} />
+              <span className="adm-heat-label">Peu demandé</span>
+            </div>
+          </div>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Éléments</p>
+          <p className="adm-legend-title">Afficher</p>
 
           <label className="adm-legend-item">
-            <input type="checkbox" checked={showStops} onChange={e => setShowStops(e.target.checked)} />
-            <span className="adm-legend-dot" style={{ background: '#1255a0' }} />
-            <span className="adm-legend-name">Arrêts</span>
-            <span className="adm-legend-city">{busStops.length}</span>
+            <input type="checkbox" checked={showRoutes}   onChange={e => setShowRoutes(e.target.checked)} />
+            <span className="adm-legend-name">Lignes ({CORRIDORS.length})</span>
           </label>
-
+          <label className="adm-legend-item">
+            <input type="checkbox" checked={showStops}    onChange={e => setShowStops(e.target.checked)} />
+            <span className="adm-legend-name">Arrêts ({BUS_STOPS.length})</span>
+          </label>
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStations} onChange={e => setShowStations(e.target.checked)} />
-            <span className="adm-legend-dot" style={{ background: '#e6b800' }} />
-            <span className="adm-legend-name">Stations</span>
-            <span className="adm-legend-city">{stations.length}</span>
+            <span className="adm-legend-name">Stations ({STATIONS.length})</span>
           </label>
+
+          <div className="adm-legend-sep" />
+          <p className="adm-legend-title">Données</p>
+          <div className="adm-stats-mini">
+            <div className="adm-stat-mini"><span>{CORRIDORS.reduce((a,c) => a + c.count, 0)}</span>tracés citoyens</div>
+            <div className="adm-stat-mini"><span>{BUS_STOPS.reduce((a,s) => a + s.count, 0)}</span>votes arrêts</div>
+            <div className="adm-stat-mini"><span>{STATIONS.reduce((a,s) => a + s.count, 0)}</span>votes stations</div>
+          </div>
         </div>
 
         <button className="db-logout" onClick={() => navigate('/')}>
@@ -200,17 +264,16 @@ function AdminMapPage() {
           center={MONCTON_CENTER}
           zoom={13}
           className="mp-leaflet"
-          zoomControl={true}
         >
           <LayersControl position="topright">
-            <LayersControl.BaseLayer checked name="Plan (OpenStreetMap)">
+            <LayersControl.BaseLayer checked name="Plan">
               <TileLayer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 maxZoom={20}
               />
             </LayersControl.BaseLayer>
-            <LayersControl.BaseLayer name="Satellite (ESRI)">
+            <LayersControl.BaseLayer name="Satellite">
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 attribution="Tiles © Esri"
@@ -219,41 +282,80 @@ function AdminMapPage() {
             </LayersControl.BaseLayer>
           </LayersControl>
 
-          {/* Lignes proposées */}
-          {DEMO_ROUTES.filter(r => visibleRoutes.has(r.id)).map(r => (
+          {/* Corridors / lignes */}
+          {showRoutes && CORRIDORS.map(c => (
             <Polyline
-              key={r.id}
-              positions={r.points}
-              pathOptions={{ color: r.color, weight: 5, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }}
+              key={c.id}
+              positions={c.points}
+              pathOptions={{
+                color:   densityColor(c.count, MAX_ROUTE),
+                weight:  densityWeight(c.count, MAX_ROUTE),
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
             >
               <Popup>
-                <strong style={{ color: r.color }}>Ligne proposée</strong><br/>
-                Citoyen : {r.user}<br/>
-                Ville : {r.ville}
+                <div style={{ minWidth: 180 }}>
+                  <strong>{c.label}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>{c.count} citoyens ont tracé ce corridor</span><br /><br />
+                  <DensityBadge count={c.count} max={MAX_ROUTE} />
+                </div>
               </Popup>
             </Polyline>
           ))}
 
           {/* Arrêts de bus */}
-          {showStops && busStops.map(s => (
-            <Marker key={s.id} position={s.pos} icon={busStopIcon}>
-              <Popup><strong>🚏 {s.label}</strong></Popup>
-            </Marker>
+          {showStops && BUS_STOPS.map(s => (
+            <CircleMarker
+              key={s.id}
+              center={s.pos}
+              radius={densityRadius(s.count, MAX_STOP)}
+              pathOptions={{
+                color:       densityColor(s.count, MAX_STOP),
+                fillColor:   densityColor(s.count, MAX_STOP),
+                fillOpacity: 0.75,
+                weight: 2,
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 180 }}>
+                  <strong>🚏 {s.label}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>{s.count} citoyens ont placé cet arrêt</span><br /><br />
+                  <DensityBadge count={s.count} max={MAX_STOP} />
+                </div>
+              </Popup>
+            </CircleMarker>
           ))}
 
           {/* Stations */}
-          {showStations && stations.map(s => (
-            <Marker key={s.id} position={s.pos} icon={stationIcon}>
-              <Popup><strong>🏢 {s.label}</strong></Popup>
-            </Marker>
+          {showStations && STATIONS.map(s => (
+            <CircleMarker
+              key={s.id}
+              center={s.pos}
+              radius={densityRadius(s.count, MAX_STA) + 3}
+              pathOptions={{
+                color:       densityColor(s.count, MAX_STA),
+                fillColor:   densityColor(s.count, MAX_STA),
+                fillOpacity: 0.75,
+                weight:      3,
+                dashArray:   '4 3',
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 180 }}>
+                  <strong>🏢 {s.label}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>{s.count} citoyens ont proposé cette station</span><br /><br />
+                  <DensityBadge count={s.count} max={MAX_STA} />
+                </div>
+              </Popup>
+            </CircleMarker>
           ))}
         </MapContainer>
 
-        {/* Compteurs */}
-        <div className="adm-map-counters">
-          <span>{visibleRoutes.size} ligne{visibleRoutes.size !== 1 ? 's' : ''}</span>
-          <span>{showStops ? busStops.length : 0} arrêt{busStops.length !== 1 ? 's' : ''}</span>
-          <span>{showStations ? stations.length : 0} station{stations.length !== 1 ? 's' : ''}</span>
+        {/* Titre flottant */}
+        <div className="adm-map-title">
+          <span>Carte de demande citoyenne — Grand Moncton</span>
         </div>
       </div>
     </div>

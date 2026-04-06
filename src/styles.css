@@ -1737,3 +1737,74 @@ body {
   backdrop-filter: blur(6px);
   letter-spacing: 0.3px;
 }
+
+/* ── Heatmap legend ── */
+
+.adm-heatmap-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.adm-heat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-heat-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.adm-heat-label {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.65);
+}
+
+/* Stats mini */
+.adm-stats-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.adm-stat-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.35);
+}
+
+.adm-stat-mini span {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #FFD700;
+}
+
+/* Titre flottant carte */
+.adm-map-title {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(10, 22, 40, 0.88);
+  border: 1px solid rgba(255,215,0,0.25);
+  border-radius: 20px;
+  padding: 6px 18px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.adm-map-title span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 0.5px;
+}
