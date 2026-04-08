@@ -5,6 +5,7 @@ import {
   TileLayer,
   Polyline,
   CircleMarker,
+  Rectangle,
   Popup,
   LayersControl,
 } from 'react-leaflet'
@@ -150,6 +151,102 @@ const MAX_STA   = Math.max(...STATIONS.map(s => s.count))
 
 const MONCTON_CENTER: [number, number] = [46.075, -64.760]
 
+// ─── Zones d'équité démographique ─────────────────────────────────────────────
+// need: high = faible revenu + fort % aînés + densité élevée → besoin de transit élevé
+// Les données seront enrichies par les formulaires citoyens (Page 4 adresses)
+
+type NeedLevel = 'high' | 'medium' | 'low'
+
+const EQUITY_ZONES: {
+  id: string; label: string
+  bounds: [[number,number],[number,number]]
+  need: NeedLevel; pop: number; income: number; seniors: number
+}[] = [
+  {
+    id: 'eq1', label: 'Centre-ville Moncton',
+    bounds: [[46.083, -64.792], [46.102, -64.766]],
+    need: 'high', pop: 12400, income: 38200, seniors: 22,
+  },
+  {
+    id: 'eq2', label: 'Quartier Université',
+    bounds: [[46.096, -64.775], [46.112, -64.750]],
+    need: 'medium', pop: 8900, income: 45600, seniors: 8,
+  },
+  {
+    id: 'eq3', label: 'Dieppe Centre',
+    bounds: [[46.088, -64.758], [46.106, -64.726]],
+    need: 'medium', pop: 10200, income: 52300, seniors: 14,
+  },
+  {
+    id: 'eq4', label: 'Dieppe Est',
+    bounds: [[46.086, -64.730], [46.104, -64.700]],
+    need: 'low', pop: 6700, income: 68000, seniors: 11,
+  },
+  {
+    id: 'eq5', label: 'Riverview',
+    bounds: [[46.052, -64.812], [46.074, -64.782]],
+    need: 'low', pop: 9100, income: 71500, seniors: 19,
+  },
+  {
+    id: 'eq6', label: 'Moncton Ouest',
+    bounds: [[46.075, -64.840], [46.095, -64.812]],
+    need: 'medium', pop: 7300, income: 49200, seniors: 17,
+  },
+  {
+    id: 'eq7', label: 'Moncton Nord',
+    bounds: [[46.102, -64.800], [46.118, -64.765]],
+    need: 'high', pop: 9800, income: 36100, seniors: 26,
+  },
+]
+
+function equityColor(need: NeedLevel): string {
+  if (need === 'high')   return '#e74c3c'  // rouge  — besoin élevé
+  if (need === 'medium') return '#f39c12'  // orange — besoin moyen
+  return '#2ecc71'                          // vert   — besoin faible
+}
+
+function equityLabel(need: NeedLevel): string {
+  if (need === 'high')   return 'Besoin élevé'
+  if (need === 'medium') return 'Besoin moyen'
+  return 'Besoin faible'
+}
+
+// ─── Flux Origine-Destination ─────────────────────────────────────────────────
+// Données dérivées silencieusement de l'application citoyenne :
+//   • adresses soumises en Page 4 → origine
+//   • tracés de routes en Page 3 → destinations populaires
+// count = nb de citoyens ayant ce déplacement
+
+const OD_FLOWS: {
+  id: string; label: string
+  from: [number,number]; to: [number,number]
+  count: number
+}[] = [
+  { id: 'od1', label: 'Résidentiel → Centre-ville',        from: [46.0700, -64.7640], to: [46.0878, -64.7782], count: 48 },
+  { id: 'od2', label: 'Université → Centre-ville',         from: [46.1020, -64.7600], to: [46.0878, -64.7782], count: 41 },
+  { id: 'od3', label: 'Dieppe → Centre-ville',             from: [46.0960, -64.7440], to: [46.0878, -64.7782], count: 35 },
+  { id: 'od4', label: 'Centre-ville → Champlain Place',    from: [46.0878, -64.7782], to: [46.0821, -64.7720], count: 33 },
+  { id: 'od5', label: 'Riverview → Centre-ville',          from: [46.0620, -64.7950], to: [46.0878, -64.7782], count: 27 },
+  { id: 'od6', label: 'Moncton Nord → Centre-ville',       from: [46.1080, -64.7820], to: [46.0878, -64.7782], count: 22 },
+  { id: 'od7', label: 'Dieppe Est → Dieppe Centre',        from: [46.0940, -64.7200], to: [46.0960, -64.7440], count: 18 },
+  { id: 'od8', label: 'Moncton Ouest → Centre-ville',      from: [46.0820, -64.8100], to: [46.0878, -64.7782], count: 15 },
+  { id: 'od9', label: 'Université → Hôpital Moncton',      from: [46.1020, -64.7600], to: [46.0960, -64.7740], count: 12 },
+  { id:'od10', label: 'Riverview → Champlain Place',       from: [46.0620, -64.7950], to: [46.0821, -64.7720], count: 9  },
+]
+
+const MAX_OD = Math.max(...OD_FLOWS.map(f => f.count))
+
+function odWeight(count: number): number {
+  const ratio = count / MAX_OD
+  if (ratio >= 0.65) return 7
+  if (ratio >= 0.35) return 4
+  return 2
+}
+
+function odOpacity(count: number): number {
+  return 0.3 + 0.55 * (count / MAX_OD)
+}
+
 // ─── Density badge ─────────────────────────────────────────────────────────────
 
 function DensityBadge({ count, max }: { count: number; max: number }) {
@@ -173,6 +270,8 @@ function AdminMapPage() {
   const [showRoutes,   setShowRoutes]   = useState(true)
   const [showStops,    setShowStops]    = useState(true)
   const [showStations, setShowStations] = useState(true)
+  const [showEquity,   setShowEquity]   = useState(false)
+  const [showOD,       setShowOD]       = useState(false)
 
   return (
     <div className="db-root">
@@ -237,6 +336,48 @@ function AdminMapPage() {
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStations} onChange={e => setShowStations(e.target.checked)} />
             <span className="adm-legend-name">Stations ({STATIONS.length})</span>
+          </label>
+
+          <div className="adm-legend-sep" />
+          <p className="adm-legend-title">Analyse d'équité</p>
+          <div className="adm-heatmap-legend">
+            <div className="adm-heat-row">
+              <span className="adm-heat-dot" style={{ background: '#e74c3c' }} />
+              <span className="adm-heat-label">Besoin élevé</span>
+            </div>
+            <div className="adm-heat-row">
+              <span className="adm-heat-dot" style={{ background: '#f39c12' }} />
+              <span className="adm-heat-label">Besoin moyen</span>
+            </div>
+            <div className="adm-heat-row">
+              <span className="adm-heat-dot" style={{ background: '#2ecc71' }} />
+              <span className="adm-heat-label">Besoin faible</span>
+            </div>
+          </div>
+          <label className="adm-legend-item">
+            <input type="checkbox" checked={showEquity} onChange={e => setShowEquity(e.target.checked)} />
+            <span className="adm-legend-name">Zones d'équité ({EQUITY_ZONES.length})</span>
+          </label>
+
+          <div className="adm-legend-sep" />
+          <p className="adm-legend-title">Données O-D</p>
+          <div className="adm-heatmap-legend">
+            <div className="adm-heat-row">
+              <span style={{ display:'inline-block', width:24, height:3, background:'#3498db', opacity:0.9, marginRight:8, borderRadius:2 }} />
+              <span className="adm-heat-label">Fort flux</span>
+            </div>
+            <div className="adm-heat-row">
+              <span style={{ display:'inline-block', width:24, height:2, background:'#3498db', opacity:0.6, marginRight:8, borderRadius:2 }} />
+              <span className="adm-heat-label">Flux moyen</span>
+            </div>
+            <div className="adm-heat-row">
+              <span style={{ display:'inline-block', width:24, height:1, background:'#3498db', opacity:0.4, marginRight:8, borderRadius:2 }} />
+              <span className="adm-heat-label">Faible flux</span>
+            </div>
+          </div>
+          <label className="adm-legend-item">
+            <input type="checkbox" checked={showOD} onChange={e => setShowOD(e.target.checked)} />
+            <span className="adm-legend-name">Flux O-D ({OD_FLOWS.length})</span>
           </label>
 
           <div className="adm-legend-sep" />
@@ -326,6 +467,64 @@ function AdminMapPage() {
                 </div>
               </Popup>
             </CircleMarker>
+          ))}
+
+          {/* Zones d'équité démographique */}
+          {showEquity && EQUITY_ZONES.map(z => (
+            <Rectangle
+              key={z.id}
+              bounds={z.bounds}
+              pathOptions={{
+                color:       equityColor(z.need),
+                fillColor:   equityColor(z.need),
+                fillOpacity: 0.18,
+                weight:      2,
+                dashArray:   '6 4',
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 200 }}>
+                  <strong>{z.label}</strong><br />
+                  <span style={{ color: equityColor(z.need), fontWeight: 700, fontSize: '0.8rem' }}>
+                    {equityLabel(z.need)}
+                  </span>
+                  <hr style={{ margin: '6px 0', borderColor: '#eee' }} />
+                  <table style={{ fontSize: '0.8rem', width: '100%' }}>
+                    <tbody>
+                      <tr><td style={{ color: '#666' }}>Population</td><td><strong>{z.pop.toLocaleString()}</strong></td></tr>
+                      <tr><td style={{ color: '#666' }}>Revenu médian</td><td><strong>{z.income.toLocaleString()} $</strong></td></tr>
+                      <tr><td style={{ color: '#666' }}>% aînés (65+)</td><td><strong>{z.seniors} %</strong></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Popup>
+            </Rectangle>
+          ))}
+
+          {/* Flux Origine-Destination */}
+          {showOD && OD_FLOWS.map(f => (
+            <Polyline
+              key={f.id}
+              positions={[f.from, f.to]}
+              pathOptions={{
+                color:   '#3498db',
+                weight:  odWeight(f.count),
+                opacity: odOpacity(f.count),
+                dashArray: '8 5',
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 190 }}>
+                  <strong>{f.label}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {f.count} déplacements enregistrés
+                  </span><br />
+                  <span style={{ color: '#3498db', fontSize: '0.78rem', display: 'block', marginTop: 4 }}>
+                    Données issues des soumissions citoyennes
+                  </span>
+                </div>
+              </Popup>
+            </Polyline>
           ))}
 
           {/* Stations */}
