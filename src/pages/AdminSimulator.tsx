@@ -442,6 +442,12 @@ function AdminSimulator() {
     setLastImpact(null)
   }
 
+  const handleGenerateFinal = useCallback(() => {
+    const activeRoutes = routes.filter(r => r.active).map(r => r.id)
+    localStorage.setItem('bmt_final_state', JSON.stringify({ activeRoutes }))
+    navigate('/carte-finale')
+  }, [routes, navigate])
+
   const handleSaveScenario = useCallback((slot: 'A' | 'B') => {
     const m = computeMetrics(stops)
     setScenarios(prev => ({
@@ -638,6 +644,24 @@ function AdminSimulator() {
               </button>
               <button className="sim-btn sim-btn-reset" onClick={handleReset}>
                 ↺ Réinitialiser
+              </button>
+            </div>
+            <div style={{ padding: '0 16px 12px' }}>
+              <button
+                className="sim-btn"
+                style={{
+                  width: '100%', background: 'rgba(255,215,0,0.1)',
+                  border: '1px solid rgba(255,215,0,0.4)', color: '#FFD700',
+                  fontWeight: 700, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 8,
+                }}
+                onClick={handleGenerateFinal}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:14,height:14}}>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                Générer la carte finale →
               </button>
             </div>
           </div>

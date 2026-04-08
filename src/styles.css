@@ -2307,3 +2307,367 @@ body {
   color: #FFD700 !important;
   font-weight: 600;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FM — Carte Finale (Page 7)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Overlay : bloc titre ─────────────────────────────────────────────────── */
+
+.fm-title-block {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 1000;
+  background: white;
+  border: 2px solid #1a1a2e;
+  border-radius: 4px;
+  min-width: 220px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fm-title-bar {
+  height: 6px;
+  background: linear-gradient(90deg, #003087 50%, #FFD700 50%);
+}
+
+.fm-title-body {
+  padding: 10px 12px 6px;
+}
+
+.fm-title-main {
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: #1a1a2e;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.fm-title-sub {
+  font-size: 0.7rem;
+  color: #444;
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+.fm-title-cities {
+  font-size: 0.62rem;
+  color: #888;
+  margin-top: 3px;
+}
+
+.fm-title-foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 12px;
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  font-size: 0.6rem;
+  color: #666;
+  font-weight: 600;
+}
+
+/* ── Overlay : flèche Nord ───────────────────────────────────────────────── */
+
+.fm-north-arrow {
+  position: absolute;
+  top: 16px;
+  right: 60px; /* laisser place au contrôle LayersControl */
+  z-index: 1000;
+  background: white;
+  border: 1.5px solid #ccc;
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  pointer-events: none;
+}
+
+.fm-north-label {
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: #1a1a2e;
+}
+
+/* ── Overlay : barre d'échelle ───────────────────────────────────────────── */
+
+.fm-scale-bar {
+  position: absolute;
+  bottom: 32px;
+  left: 16px;
+  z-index: 1000;
+  background: white;
+  border: 1.5px solid #aaa;
+  border-radius: 3px;
+  padding: 6px 10px 5px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  pointer-events: none;
+}
+
+.fm-scale-track {
+  display: flex;
+  height: 8px;
+  border: 1.5px solid #1a1a2e;
+  overflow: hidden;
+  border-radius: 1px;
+}
+
+.fm-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.55rem;
+  color: #333;
+  font-weight: 600;
+  margin-top: 3px;
+  min-width: 120px;
+}
+
+/* ── Overlay : légende ───────────────────────────────────────────────────── */
+
+.fm-map-legend {
+  position: absolute;
+  bottom: 32px;
+  right: 12px;
+  z-index: 1000;
+  background: white;
+  border: 1.5px solid #ccc;
+  border-radius: 4px;
+  padding: 10px 12px;
+  min-width: 180px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+
+.fm-map-legend-title {
+  font-size: 0.62rem;
+  font-weight: 900;
+  color: #1a1a2e;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.fm-map-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.fm-map-legend-line {
+  width: 28px;
+  height: 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.fm-map-legend-sep {
+  border-top: 1px solid #eee;
+  margin: 7px 0;
+}
+
+/* Stop symbols in legend */
+.fm-sym {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 2px solid #1255a0;
+}
+.fm-sym-terminus { border-radius: 50%; background: white; border-color: #C8102E; }
+.fm-sym-transfer { border-radius: 50%; background: white; border-color: #0057A8; }
+.fm-sym-station  { border-radius: 2px; transform: rotate(45deg); background: white; border-color: #e6b800; }
+.fm-sym-regular  { border-radius: 50%; background: white; border-color: #555; width: 9px; height: 9px; }
+
+/* ── KPIs sommaire ────────────────────────────────────────────────────────── */
+
+.fm-kpi-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.fm-kpi {
+  flex: 1;
+  background: rgba(255,215,0,0.07);
+  border: 1px solid rgba(255,215,0,0.18);
+  border-radius: 10px;
+  padding: 10px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fm-kpi span {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #FFD700;
+  line-height: 1;
+}
+
+.fm-kpi {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* ── Cartes de lignes ─────────────────────────────────────────────────────── */
+
+.fm-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.fm-route-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+
+.fm-route-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: white;
+  flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+
+.fm-route-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fm-route-label {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.8);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-route-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.fm-route-meta span {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.35);
+}
+
+/* ── Conformité N.-B. ─────────────────────────────────────────────────────── */
+
+.fm-standards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.fm-standard-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fm-std-check {
+  color: #2ecc71;
+  font-weight: 900;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.fm-std-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fm-std-label {
+  font-size: 0.73rem;
+  color: rgba(255,255,255,0.75);
+  font-weight: 600;
+}
+
+.fm-std-desc {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.3);
+}
+
+/* ── Bloc révision ────────────────────────────────────────────────────────── */
+
+.fm-revision-block {
+  margin-top: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.fm-revision-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+  font-size: 0.7rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.fm-revision-row:last-child {
+  border-bottom: none;
+}
+
+.fm-revision-row span {
+  color: rgba(255,255,255,0.35);
+}
+
+.fm-revision-row strong {
+  color: rgba(255,255,255,0.75);
+  font-weight: 600;
+}
+
+/* ── Impression / Export PDF ─────────────────────────────────────────────── */
+
+@media print {
+  .db-sidebar,
+  .sim-panel  { display: none !important; }
+
+  .db-root    { display: block !important; }
+  .mp-map-wrap {
+    width: 100vw !important;
+    height: 100vh !important;
+  }
+  .mp-leaflet {
+    width: 100% !important;
+    height: 100vh !important;
+  }
+  .fm-title-block,
+  .fm-north-arrow,
+  .fm-scale-bar,
+  .fm-map-legend { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}

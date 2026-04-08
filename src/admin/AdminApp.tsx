@@ -6,6 +6,7 @@ import AdminLogin      from '@/pages/AdminLogin'
 import AdminDashboard  from '@/pages/AdminDashboard'
 import AdminMapPage    from '@/pages/AdminMapPage'
 import AdminSimulator  from '@/pages/AdminSimulator'
+import AdminFinalMap   from '@/pages/AdminFinalMap'
 
 function AdminApp() {
   const [lang, setLang]     = useState<'en' | 'fr' | null>(null)
@@ -16,13 +17,14 @@ function AdminApp() {
 
   return (
     <Routes>
-      <Route path="/"          element={<SplashScreen to="/language" />} />
-      <Route path="/language"  element={<LanguageChoice onSelect={setLang} to="/login" />} />
-      <Route path="/login"     element={<AdminLogin onAuth={() => setAuthed(true)} />} />
-      <Route path="/dashboard" element={guard(<AdminDashboard onLogout={() => setAuthed(false)} />)} />
-      <Route path="/carte"      element={guard(<AdminMapPage />)} />
-      <Route path="/simulateur" element={guard(<AdminSimulator />)} />
-      <Route path="*"           element={<Navigate to="/" replace />} />
+      <Route path="/"             element={<SplashScreen to="/language" />} />
+      <Route path="/language"     element={<LanguageChoice onSelect={setLang} to="/login" />} />
+      <Route path="/login"        element={<AdminLogin onAuth={() => setAuthed(true)} />} />
+      <Route path="/dashboard"    element={guard(<AdminDashboard onLogout={() => setAuthed(false)} />)} />
+      <Route path="/carte"        element={guard(<AdminMapPage />)} />
+      <Route path="/simulateur"   element={guard(<AdminSimulator />)} />
+      <Route path="/carte-finale" element={guard(<AdminFinalMap />)} />
+      <Route path="*"             element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
