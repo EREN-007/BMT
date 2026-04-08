@@ -1808,3 +1808,268 @@ body {
   color: rgba(255,255,255,0.7);
   letter-spacing: 0.5px;
 }
+
+/* ============================================================
+   ADMIN SIMULATOR — Page 6 admin
+   ============================================================ */
+
+/* Panneau droit */
+.sim-panel {
+  width: 300px;
+  min-width: 300px;
+  background: rgba(10, 22, 40, 0.97);
+  border-left: 1px solid rgba(255, 215, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+.sim-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+
+.sim-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #FFD700;
+  margin: 0;
+}
+
+.sim-subtitle {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.3);
+  margin: 2px 0 0;
+  letter-spacing: 0.5px;
+}
+
+/* Score de couverture */
+.sim-score-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+.sim-score-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid var(--score-color, #2ecc71);
+  background: rgba(0,0,0,0.3);
+  flex-shrink: 0;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--score-color, #2ecc71) 30%, transparent);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.sim-score-value {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: var(--score-color, #2ecc71);
+  line-height: 1;
+  transition: color 0.4s ease;
+}
+
+.sim-score-unit {
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.sim-score-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sim-score-label {
+  font-size: 0.85rem;
+  font-weight: 800;
+  transition: color 0.4s ease;
+}
+
+.sim-score-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sim-score-details span {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.4);
+}
+
+/* Alerte impact */
+.sim-impact-alert {
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  animation: sim-alert-in 0.3s ease both;
+}
+
+@keyframes sim-alert-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sim-gain {
+  background: rgba(46, 204, 113, 0.12);
+  color: #2ecc71;
+  border-bottom: 1px solid rgba(46, 204, 113, 0.2);
+}
+
+.sim-loss {
+  background: rgba(231, 76, 60, 0.12);
+  color: #e74c3c;
+  border-bottom: 1px solid rgba(231, 76, 60, 0.2);
+}
+
+/* Sections */
+.sim-section {
+  padding: 10px 16px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+.sim-section-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.sim-section-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+
+/* Toggle rows */
+.sim-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+}
+
+.sim-toggle {
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.35);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+}
+
+.sim-toggle-on {
+  background: rgba(46, 204, 113, 0.15) !important;
+  border-color: rgba(46, 204, 113, 0.5) !important;
+  color: #2ecc71 !important;
+}
+
+.sim-toggle-sm {
+  padding: 2px 7px;
+  font-size: 0.62rem;
+  flex-shrink: 0;
+}
+
+/* Item rows */
+.sim-item-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+}
+
+.sim-item-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+
+.sim-item-label {
+  font-size: 0.74rem;
+  color: rgba(255,255,255,0.6);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-item-inactive .sim-item-label {
+  color: rgba(255,255,255,0.25);
+  text-decoration: line-through;
+}
+
+/* Actions */
+.sim-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+
+.sim-btn {
+  flex: 1;
+  padding: 9px 8px;
+  border-radius: 10px;
+  border: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.3px;
+}
+
+.sim-btn-add {
+  background: rgba(18, 85, 160, 0.2);
+  border: 1px solid rgba(18, 85, 160, 0.4);
+  color: #5dade2;
+}
+
+.sim-btn-add:hover, .sim-btn-active {
+  background: rgba(18, 85, 160, 0.35) !important;
+  border-color: rgba(18, 85, 160, 0.7) !important;
+  color: white !important;
+}
+
+.sim-btn-reset {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.4);
+}
+
+.sim-btn-reset:hover {
+  background: rgba(255,255,255,0.1);
+  color: white;
+}
+
+@media (max-width: 900px) {
+  .sim-panel { display: none; }
+}
