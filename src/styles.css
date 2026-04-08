@@ -2073,3 +2073,237 @@ body {
 @media (max-width: 900px) {
   .sim-panel { display: none; }
 }
+
+/* ─── Simulator tabs ──────────────────────────────────────────────────────── */
+
+.sim-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 10px 16px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 0;
+}
+
+.sim-tab {
+  flex: 1;
+  padding: 7px 4px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: rgba(255,255,255,0.35);
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: -1px;
+}
+
+.sim-tab:hover {
+  color: rgba(255,255,255,0.7);
+}
+
+.sim-tab-active {
+  color: #FFD700 !important;
+  border-bottom-color: #FFD700 !important;
+}
+
+/* Contenu de chaque onglet */
+.sim-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+
+/* ─── Achalandage — carte total ───────────────────────────────────────────── */
+
+.sim-total-card {
+  background: rgba(255,215,0,0.07);
+  border: 1px solid rgba(255,215,0,0.18);
+  border-radius: 12px;
+  padding: 16px 12px;
+  text-align: center;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.sim-total-value {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #FFD700;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.sim-total-label {
+  font-size: 0.67rem;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-top: 5px;
+}
+
+/* ─── Achalandage — barres par ligne ─────────────────────────────────────── */
+
+.sim-ridership-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sim-ridership-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sim-ridership-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sim-ridership-name {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 72%;
+}
+
+.sim-ridership-count {
+  font-size: 0.75rem;
+  color: white;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sim-ridership-bar-track {
+  height: 7px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sim-ridership-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 2px;
+}
+
+/* ─── Scénarios — slots ───────────────────────────────────────────────────── */
+
+.sim-scenario-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sim-scenario-slot {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: rgba(255,255,255,0.02);
+}
+
+.sim-scenario-slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sim-scenario-slot-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.75);
+}
+
+.sim-scenario-save-btn {
+  font-size: 0.65rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,215,0,0.35);
+  background: rgba(255,215,0,0.07);
+  color: #FFD700;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.sim-scenario-save-btn:hover {
+  background: rgba(255,215,0,0.15);
+  border-color: rgba(255,215,0,0.6);
+}
+
+.sim-scenario-empty {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.25);
+  font-style: italic;
+}
+
+.sim-scenario-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 10px;
+}
+
+.sim-scenario-metric {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.4);
+}
+
+.sim-scenario-metric strong {
+  color: rgba(255,255,255,0.85);
+  font-weight: 700;
+}
+
+/* ─── Scénarios — tableau comparatif ────────────────────────────────────────*/
+
+.sim-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.73rem;
+}
+
+.sim-compare-table th {
+  color: rgba(255,255,255,0.3);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  letter-spacing: 0.8px;
+  padding: 5px 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sim-compare-table td {
+  padding: 6px 6px;
+  color: rgba(255,255,255,0.6);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: color 0.2s;
+}
+
+.sim-compare-best {
+  color: #2ecc71 !important;
+  font-weight: 700;
+}
+
+.sim-compare-worst {
+  color: #e74c3c !important;
+}
+
+.sim-compare-current {
+  color: #FFD700 !important;
+  font-weight: 600;
+}

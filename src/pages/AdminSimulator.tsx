@@ -16,7 +16,7 @@ interface SimStop {
   type: 'busstop' | 'station'
   pos: [number, number]
   active: boolean
-  demand: number          // nb citoyens ayant proposé cet arrêt
+  demand: number
 }
 
 interface SimRoute {
@@ -25,6 +25,20 @@ interface SimRoute {
   points: [number, number][]
   active: boolean
   color: string
+}
+
+type TabId = 'simulation' | 'achalandage' | 'scenarios'
+
+interface Scenario {
+  id: string
+  label: string
+  stops: SimStop[]
+  routes: SimRoute[]
+  coveragePct: number
+  ridership: number
+  deadZones: number
+  activeStops: number
+  activeRoutes: number
 }
 
 // ─── Données initiales ────────────────────────────────────────────────────────
@@ -56,27 +70,53 @@ const INIT_ROUTES: SimRoute[] = [
     points: [[46.0878,-64.7782],[46.0820,-64.7800],[46.0760,-64.7830],[46.0700,-64.7900],[46.0630,-64.7970]], active: false },
 ]
 
-const COVERAGE_RADIUS = 400   // mètres — rayon de marche ~5 min
-const STATION_RADIUS  = 800   // stations = rayon plus large ~10 min
+// ─── Associations route → arrêts pour modélisation d'achalandage ─────────────
+// Chaque route dessert une liste d'arrêts dont on agrège la demande citoyenne
+
+const ROUTE_STOPS: Record<string, string[]> = {
+  r1: ['s1', 's2', 's5', 'st1'],
+  r2: ['s3', 's5', 's6', 'st1'],
+  r3: ['s4', 's8', 'st2'],
+  r4: ['s1', 's7', 's10', 'st3'],
+}
+
+const COVERAGE_RADIUS = 400
+const STATION_RADIUS  = 800
 const MONCTON_CENTER: [number, number] = [46.075, -64.760]
 
-// ─── Calcul des métriques ─────────────────────────────────────────────────────
+// ─── Calcul des métriques de couverture ───────────────────────────────────────
 
 function computeMetrics(stops: SimStop[]) {
-  const active = stops.filter(s => s.active)
-  const buses   = active.filter(s => s.type === 'busstop').length
-  const stations = active.filter(s => s.type === 'station').length
-  const totalDemand  = stops.reduce((a, s) => a + s.demand, 0)
+  const active        = stops.filter(s => s.active)
+  const buses         = active.filter(s => s.type === 'busstop').length
+  const stations      = active.filter(s => s.type === 'station').length
+  const totalDemand   = stops.reduce((a, s) => a + s.demand, 0)
   const coveredDemand = active.reduce((a, s) => a + s.demand, 0)
-  const coveragePct  = Math.round((coveredDemand / totalDemand) * 100)
-
-  // Estimation zones mortes (arrêts inactifs à forte demande)
-  const deadZones = stops.filter(s => !s.active && s.demand >= 10).length
-
-  // Score d'efficacité : répartition géographique
-  const spread = active.length >= 6 ? 'Optimale' : active.length >= 3 ? 'Moyenne' : 'Faible'
-
+  const coveragePct   = Math.round((coveredDemand / totalDemand) * 100)
+  const deadZones     = stops.filter(s => !s.active && s.demand >= 10).length
+  const spread        = active.length >= 6 ? 'Optimale' : active.length >= 3 ? 'Moyenne' : 'Faible'
   return { buses, stations, coveragePct, deadZones, spread, active: active.length }
+}
+
+// ─── Modélisation d'achalandage ───────────────────────────────────────────────
+// Formule : demande agrégée des arrêts actifs × fréquence journalière × facteur de charge
+// En heure de pointe : × 1.8 (AM/PM rush)
+
+const DAILY_TRIPS     = 10    // passages/jour par sens
+const PEAK_FACTOR     = 1.8
+const LOAD_FACTOR     = 0.72  // % d'occupation moyen
+
+function computeRouteRidership(route: SimRoute, stops: SimStop[], peak: boolean): number {
+  if (!route.active) return 0
+  const ids        = ROUTE_STOPS[route.id] || []
+  const stopObjs   = ids.map(id => stops.find(s => s.id === id)).filter(Boolean) as SimStop[]
+  const demand     = stopObjs.filter(s => s.active).reduce((a, s) => a + s.demand, 0)
+  const base       = demand * DAILY_TRIPS * LOAD_FACTOR
+  return Math.round(peak ? base * PEAK_FACTOR : base)
+}
+
+function computeTotalRidership(routes: SimRoute[], stops: SimStop[], peak: boolean): number {
+  return routes.reduce((a, r) => a + computeRouteRidership(r, stops, peak), 0)
 }
 
 // ─── Custom icons ─────────────────────────────────────────────────────────────
@@ -94,19 +134,17 @@ function makeIcon(type: 'busstop' | 'station', active: boolean) {
   })
 }
 
-// ─── Composant carte : gestion drag ──────────────────────────────────────────
+// ─── Composant arrêt draggable ─────────────────────────────────────────────────
 
 interface DraggableStopProps {
   stop: SimStop
   onDragEnd: (id: string, pos: [number, number]) => void
   onToggle: (id: string) => void
   showCoverage: boolean
-  impact: 'gain' | 'loss' | null
 }
 
-function DraggableStop({ stop, onDragEnd, onToggle, showCoverage, impact }: DraggableStopProps) {
+function DraggableStop({ stop, onDragEnd, onToggle, showCoverage }: DraggableStopProps) {
   const radius = stop.type === 'station' ? STATION_RADIUS : COVERAGE_RADIUS
-
   const coverageColor = stop.active
     ? stop.demand >= 25 ? '#2ecc71' : stop.demand >= 12 ? '#f39c12' : '#ecf0f1'
     : 'transparent'
@@ -117,13 +155,7 @@ function DraggableStop({ stop, onDragEnd, onToggle, showCoverage, impact }: Drag
         <Circle
           center={stop.pos}
           radius={radius}
-          pathOptions={{
-            color: coverageColor,
-            fillColor: coverageColor,
-            fillOpacity: 0.12,
-            weight: 1.5,
-            opacity: 0.5,
-          }}
+          pathOptions={{ color: coverageColor, fillColor: coverageColor, fillOpacity: 0.12, weight: 1.5, opacity: 0.5 }}
         />
       )}
       <Marker
@@ -162,7 +194,7 @@ function DraggableStop({ stop, onDragEnd, onToggle, showCoverage, impact }: Drag
   )
 }
 
-// ─── Ajout d'arrêt temporaire par clic ───────────────────────────────────────
+// ─── Ajout d'arrêt par clic ───────────────────────────────────────────────────
 
 function AddStopOnClick({ adding, onAdd }: { adding: boolean; onAdd: (pos: [number,number]) => void }) {
   useMapEvents({
@@ -173,19 +205,208 @@ function AddStopOnClick({ adding, onAdd }: { adding: boolean; onAdd: (pos: [numb
   return null
 }
 
+// ─── Tab : Achalandage ────────────────────────────────────────────────────────
+
+function TabAchalandage({ routes, stops }: { routes: SimRoute[]; stops: SimStop[] }) {
+  const [peak, setPeak] = useState(false)
+
+  const total    = computeTotalRidership(routes, stops, peak)
+  const maxRoute = Math.max(...routes.map(r => computeRouteRidership(r, stops, peak)), 1)
+
+  const insight = (() => {
+    const active = routes.filter(r => r.active)
+    if (active.length === 0) return 'Aucune ligne active.'
+    const best = active.reduce((a, b) =>
+      computeRouteRidership(a, stops, false) >= computeRouteRidership(b, stops, false) ? a : b)
+    return `${best.label} est la plus achalandée.`
+  })()
+
+  return (
+    <div className="sim-tab-content">
+      {/* Carte total */}
+      <div className="sim-total-card">
+        <div className="sim-total-value">{total.toLocaleString()}</div>
+        <div className="sim-total-label">passagers / jour estimés</div>
+      </div>
+
+      {/* Toggle pointe */}
+      <div className="sim-toggle-row" style={{ marginBottom: 14 }}>
+        <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>
+          Heures de pointe (×{PEAK_FACTOR})
+        </span>
+        <button className={`sim-toggle ${peak ? 'sim-toggle-on' : ''}`} onClick={() => setPeak(v => !v)}>
+          {peak ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
+      {/* Barres par ligne */}
+      <p className="sim-section-title">Achalandage par ligne</p>
+      <div className="sim-ridership-list">
+        {routes.map(r => {
+          const val   = computeRouteRidership(r, stops, peak)
+          const width = r.active ? Math.round((val / maxRoute) * 100) : 0
+          return (
+            <div key={r.id} className="sim-ridership-item">
+              <div className="sim-ridership-header">
+                <span className="sim-ridership-name">{r.label}</span>
+                <span className="sim-ridership-count">
+                  {r.active ? val.toLocaleString() : '—'}
+                </span>
+              </div>
+              <div className="sim-ridership-bar-track">
+                <div
+                  className="sim-ridership-bar-fill"
+                  style={{ width: `${width}%`, background: r.active ? r.color : '#333' }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Insight */}
+      <div style={{
+        marginTop: 14, padding: '10px 12px', borderRadius: 8,
+        background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.15)',
+        fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.5,
+      }}>
+        <span style={{ color: '#FFD700', fontWeight: 700 }}>Analyse : </span>
+        {insight}
+        {' '}Activez la ligne D pour desservir Riverview (+{computeRouteRidership(
+          { ...routes.find(r => r.id === 'r4')!, active: true }, stops, peak
+        ).toLocaleString()} pass./j).
+      </div>
+    </div>
+  )
+}
+
+// ─── Tab : Scénarios ──────────────────────────────────────────────────────────
+
+function TabScenarios({
+  stops, routes,
+  scenarios, onSave,
+}: {
+  stops: SimStop[]
+  routes: SimRoute[]
+  scenarios: { A: Scenario | null; B: Scenario | null }
+  onSave: (slot: 'A' | 'B') => void
+}) {
+  const m       = computeMetrics(stops)
+  const current: Scenario = {
+    id: 'current', label: 'En cours',
+    stops, routes,
+    coveragePct:  m.coveragePct,
+    ridership:    computeTotalRidership(routes, stops, false),
+    deadZones:    m.deadZones,
+    activeStops:  m.active,
+    activeRoutes: routes.filter(r => r.active).length,
+  }
+
+  const rows: (Scenario | null)[] = [current, scenarios.A, scenarios.B]
+  const defined = rows.filter(Boolean) as Scenario[]
+
+  // highlight best value per metric
+  const bestCov     = Math.max(...defined.map(s => s.coveragePct))
+  const bestRide    = Math.max(...defined.map(s => s.ridership))
+  const bestDead    = Math.min(...defined.map(s => s.deadZones))
+
+  return (
+    <div className="sim-tab-content">
+      {/* Save slots */}
+      <div className="sim-scenario-slots">
+        {(['A', 'B'] as const).map(slot => (
+          <div key={slot} className="sim-scenario-slot">
+            <div className="sim-scenario-slot-header">
+              <span className="sim-scenario-slot-label">Scénario {slot}</span>
+              <button className="sim-scenario-save-btn" onClick={() => onSave(slot)}>
+                Sauvegarder
+              </button>
+            </div>
+            {scenarios[slot] ? (
+              <div className="sim-scenario-metrics">
+                <span className="sim-scenario-metric">Couverture <strong>{scenarios[slot]!.coveragePct}%</strong></span>
+                <span className="sim-scenario-metric">Passagers <strong>{scenarios[slot]!.ridership.toLocaleString()}</strong></span>
+                <span className="sim-scenario-metric">Zones mortes <strong>{scenarios[slot]!.deadZones}</strong></span>
+                <span className="sim-scenario-metric">Arrêts actifs <strong>{scenarios[slot]!.activeStops}</strong></span>
+              </div>
+            ) : (
+              <span className="sim-scenario-empty">Aucun scénario sauvegardé</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Tableau comparatif */}
+      {defined.length > 1 && (
+        <>
+          <p className="sim-section-title">Comparaison</p>
+          <table className="sim-compare-table">
+            <thead>
+              <tr>
+                <th>Scénario</th>
+                <th>Couv.</th>
+                <th>Pass./j</th>
+                <th>Zones⚠</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((s, i) => {
+                if (!s) return null
+                const isCurrent = s.id === 'current'
+                return (
+                  <tr key={s.id}>
+                    <td className={isCurrent ? 'sim-compare-current' : ''}>
+                      {isCurrent ? '● En cours' : `Scénario ${s.id}`}
+                    </td>
+                    <td className={
+                      s.coveragePct === bestCov    ? 'sim-compare-best'
+                        : defined.length > 1 && s.coveragePct === Math.min(...defined.map(x => x.coveragePct)) ? 'sim-compare-worst' : ''
+                    }>
+                      {s.coveragePct}%
+                    </td>
+                    <td className={
+                      s.ridership === bestRide     ? 'sim-compare-best'
+                        : defined.length > 1 && s.ridership === Math.min(...defined.map(x => x.ridership)) ? 'sim-compare-worst' : ''
+                    }>
+                      {s.ridership.toLocaleString()}
+                    </td>
+                    <td className={
+                      s.deadZones === bestDead     ? 'sim-compare-best'
+                        : defined.length > 1 && s.deadZones === Math.max(...defined.map(x => x.deadZones)) ? 'sim-compare-worst' : ''
+                    }>
+                      {s.deadZones}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: 8, lineHeight: 1.5 }}>
+            Vert = meilleur · Rouge = moins performant
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function AdminSimulator() {
   const navigate = useNavigate()
-  const [stops,         setStops]         = useState<SimStop[]>(INIT_STOPS)
-  const [routes,        setRoutes]         = useState<SimRoute[]>(INIT_ROUTES)
-  const [showCoverage,  setShowCoverage]   = useState(true)
-  const [showRoutes,    setShowRoutes]     = useState(true)
-  const [addingStop,    setAddingStop]     = useState(false)
-  const [lastImpact,    setLastImpact]     = useState<{ id: string; type: 'gain'|'loss' } | null>(null)
+  const [stops,        setStops]        = useState<SimStop[]>(INIT_STOPS)
+  const [routes,       setRoutes]       = useState<SimRoute[]>(INIT_ROUTES)
+  const [showCoverage, setShowCoverage] = useState(true)
+  const [showRoutes,   setShowRoutes]   = useState(true)
+  const [addingStop,   setAddingStop]   = useState(false)
+  const [lastImpact,   setLastImpact]   = useState<{ id: string; type: 'gain'|'loss' } | null>(null)
+  const [activeTab,    setActiveTab]    = useState<TabId>('simulation')
+  const [scenarios,    setScenarios]    = useState<{ A: Scenario | null; B: Scenario | null }>({ A: null, B: null })
   const counterRef = useRef(100)
 
-  const metrics = computeMetrics(stops)
+  const metrics      = computeMetrics(stops)
+  const impactColor  = metrics.coveragePct >= 70 ? '#2ecc71' : metrics.coveragePct >= 45 ? '#f39c12' : '#e74c3c'
+  const impactLabel  = metrics.coveragePct >= 70 ? 'Excellent' : metrics.coveragePct >= 45 ? 'Acceptable' : 'Insuffisant'
 
   const handleDragEnd = useCallback((id: string, pos: [number, number]) => {
     setStops(prev => prev.map(s => s.id === id ? { ...s, pos } : s))
@@ -221,13 +442,33 @@ function AdminSimulator() {
     setLastImpact(null)
   }
 
-  const impactColor   = metrics.coveragePct >= 70 ? '#2ecc71' : metrics.coveragePct >= 45 ? '#f39c12' : '#e74c3c'
-  const impactLabel   = metrics.coveragePct >= 70 ? 'Excellent' : metrics.coveragePct >= 45 ? 'Acceptable' : 'Insuffisant'
+  const handleSaveScenario = useCallback((slot: 'A' | 'B') => {
+    const m = computeMetrics(stops)
+    setScenarios(prev => ({
+      ...prev,
+      [slot]: {
+        id: slot, label: `Scénario ${slot}`,
+        stops: JSON.parse(JSON.stringify(stops)),
+        routes: JSON.parse(JSON.stringify(routes)),
+        coveragePct:  m.coveragePct,
+        ridership:    computeTotalRidership(routes, stops, false),
+        deadZones:    m.deadZones,
+        activeStops:  m.active,
+        activeRoutes: routes.filter(r => r.active).length,
+      },
+    }))
+  }, [stops, routes])
+
+  const TABS: { id: TabId; label: string }[] = [
+    { id: 'simulation',  label: 'Simulation'  },
+    { id: 'achalandage', label: 'Achalandage' },
+    { id: 'scenarios',   label: 'Scénarios'   },
+  ]
 
   return (
     <div className="db-root">
 
-      {/* ── Sidebar nav ── */}
+      {/* ── Sidebar nav (icon-only) ── */}
       <aside className="db-sidebar" style={{ minWidth: 60, width: 60, padding: '12px 6px' }}>
         <div className="db-sidebar-brand" style={{ fontSize: '0.55rem', padding: '0 2px 8px' }}>BMT</div>
         <nav className="db-nav">
@@ -259,34 +500,32 @@ function AdminSimulator() {
 
       {/* ── Map ── */}
       <div className="mp-map-wrap">
-        <MapContainer center={MONCTON_CENTER} zoom={13} className="mp-leaflet" style={{ cursor: addingStop ? 'crosshair' : undefined }}>
+        <MapContainer
+          center={MONCTON_CENTER} zoom={13} className="mp-leaflet"
+          style={{ cursor: addingStop ? 'crosshair' : undefined }}
+        >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             maxZoom={20}
           />
 
-          {/* Lignes */}
           {showRoutes && routes.filter(r => r.active).map(r => (
-            <Polyline key={r.id} positions={r.points} pathOptions={{ color: r.color, weight: 5, opacity: 0.75, lineCap: 'round' }} />
+            <Polyline key={r.id} positions={r.points}
+              pathOptions={{ color: r.color, weight: 5, opacity: 0.75, lineCap: 'round' }} />
           ))}
 
-          {/* Arrêts draggables */}
           {stops.map(s => (
             <DraggableStop
-              key={s.id}
-              stop={s}
-              onDragEnd={handleDragEnd}
-              onToggle={handleToggle}
+              key={s.id} stop={s}
+              onDragEnd={handleDragEnd} onToggle={handleToggle}
               showCoverage={showCoverage}
-              impact={lastImpact?.id === s.id ? lastImpact.type : null}
             />
           ))}
 
           <AddStopOnClick adding={addingStop} onAdd={handleAddStop} />
         </MapContainer>
 
-        {/* Hint ajout */}
         {addingStop && (
           <div className="mp-hint mp-hint-drawing">
             Cliquez sur la carte pour placer un nouvel arrêt
@@ -294,10 +533,10 @@ function AdminSimulator() {
         )}
       </div>
 
-      {/* ── Panneau simulation ── */}
+      {/* ── Panneau droit ── */}
       <aside className="sim-panel">
 
-        {/* Titre */}
+        {/* Header */}
         <div className="sim-panel-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2" style={{width:18,height:18,flexShrink:0}}>
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -308,7 +547,7 @@ function AdminSimulator() {
           </div>
         </div>
 
-        {/* Score de couverture */}
+        {/* Score couverture (toujours visible) */}
         <div className="sim-score-card">
           <div className="sim-score-ring" style={{ '--score-color': impactColor, '--score-pct': metrics.coveragePct } as React.CSSProperties}>
             <span className="sim-score-value">{metrics.coveragePct}%</span>
@@ -320,12 +559,10 @@ function AdminSimulator() {
               <span>🚏 {metrics.buses} arrêts actifs</span>
               <span>🏢 {metrics.stations} stations actives</span>
               <span>⚠️ {metrics.deadZones} zone{metrics.deadZones !== 1 ? 's' : ''} morte{metrics.deadZones !== 1 ? 's' : ''}</span>
-              <span>📊 Répartition : {metrics.spread}</span>
             </div>
           </div>
         </div>
 
-        {/* Dernière action */}
         {lastImpact && (
           <div className={`sim-impact-alert ${lastImpact.type === 'gain' ? 'sim-gain' : 'sim-loss'}`}>
             {lastImpact.type === 'gain'
@@ -334,60 +571,91 @@ function AdminSimulator() {
           </div>
         )}
 
-        {/* Contrôles */}
-        <div className="sim-section">
-          <p className="sim-section-title">Affichage</p>
-          <label className="sim-toggle-row">
-            <span>Zones de couverture</span>
-            <button className={`sim-toggle ${showCoverage ? 'sim-toggle-on' : ''}`} onClick={() => setShowCoverage(v => !v)}>
-              {showCoverage ? 'ON' : 'OFF'}
+        {/* Onglets */}
+        <div className="sim-tabs">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              className={`sim-tab ${activeTab === t.id ? 'sim-tab-active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              {t.label}
             </button>
-          </label>
-          <label className="sim-toggle-row">
-            <span>Lignes de bus</span>
-            <button className={`sim-toggle ${showRoutes ? 'sim-toggle-on' : ''}`} onClick={() => setShowRoutes(v => !v)}>
-              {showRoutes ? 'ON' : 'OFF'}
-            </button>
-          </label>
-        </div>
-
-        {/* Lignes */}
-        <div className="sim-section">
-          <p className="sim-section-title">Lignes ({routes.filter(r=>r.active).length}/{routes.length} actives)</p>
-          {routes.map(r => (
-            <div key={r.id} className="sim-item-row">
-              <span className="sim-item-dot" style={{ background: r.active ? r.color : '#444' }} />
-              <span className="sim-item-label">{r.label}</span>
-              <button className={`sim-toggle sim-toggle-sm ${r.active ? 'sim-toggle-on' : ''}`} onClick={() => handleToggleRoute(r.id)}>
-                {r.active ? 'ON' : 'OFF'}
-              </button>
-            </div>
           ))}
         </div>
 
-        {/* Arrêts */}
-        <div className="sim-section sim-section-scroll">
-          <p className="sim-section-title">Arrêts & Stations ({metrics.active}/{stops.length} actifs)</p>
-          {stops.map(s => (
-            <div key={s.id} className={`sim-item-row ${!s.active ? 'sim-item-inactive' : ''}`}>
-              <span className="sim-item-dot" style={{ background: s.active ? (s.type==='station' ? '#e6b800' : '#1255a0') : '#444', borderRadius: s.type==='station' ? 3 : '50%' }} />
-              <span className="sim-item-label">{s.label}</span>
-              <button className={`sim-toggle sim-toggle-sm ${s.active ? 'sim-toggle-on' : ''}`} onClick={() => handleToggle(s.id)}>
-                {s.active ? 'ON' : 'OFF'}
+        {/* ── Onglet Simulation ── */}
+        {activeTab === 'simulation' && (
+          <div className="sim-tab-content">
+            <div className="sim-section">
+              <p className="sim-section-title">Affichage</p>
+              <label className="sim-toggle-row">
+                <span>Zones de couverture</span>
+                <button className={`sim-toggle ${showCoverage ? 'sim-toggle-on' : ''}`} onClick={() => setShowCoverage(v => !v)}>
+                  {showCoverage ? 'ON' : 'OFF'}
+                </button>
+              </label>
+              <label className="sim-toggle-row">
+                <span>Lignes de bus</span>
+                <button className={`sim-toggle ${showRoutes ? 'sim-toggle-on' : ''}`} onClick={() => setShowRoutes(v => !v)}>
+                  {showRoutes ? 'ON' : 'OFF'}
+                </button>
+              </label>
+            </div>
+
+            <div className="sim-section">
+              <p className="sim-section-title">Lignes ({routes.filter(r=>r.active).length}/{routes.length} actives)</p>
+              {routes.map(r => (
+                <div key={r.id} className="sim-item-row">
+                  <span className="sim-item-dot" style={{ background: r.active ? r.color : '#444' }} />
+                  <span className="sim-item-label">{r.label}</span>
+                  <button className={`sim-toggle sim-toggle-sm ${r.active ? 'sim-toggle-on' : ''}`} onClick={() => handleToggleRoute(r.id)}>
+                    {r.active ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="sim-section sim-section-scroll">
+              <p className="sim-section-title">Arrêts & Stations ({metrics.active}/{stops.length} actifs)</p>
+              {stops.map(s => (
+                <div key={s.id} className={`sim-item-row ${!s.active ? 'sim-item-inactive' : ''}`}>
+                  <span className="sim-item-dot" style={{
+                    background: s.active ? (s.type==='station' ? '#e6b800' : '#1255a0') : '#444',
+                    borderRadius: s.type==='station' ? 3 : '50%',
+                  }} />
+                  <span className="sim-item-label">{s.label}</span>
+                  <button className={`sim-toggle sim-toggle-sm ${s.active ? 'sim-toggle-on' : ''}`} onClick={() => handleToggle(s.id)}>
+                    {s.active ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="sim-actions">
+              <button className={`sim-btn sim-btn-add ${addingStop ? 'sim-btn-active' : ''}`} onClick={() => setAddingStop(v => !v)}>
+                {addingStop ? '✕ Annuler' : '+ Ajouter arrêt'}
+              </button>
+              <button className="sim-btn sim-btn-reset" onClick={handleReset}>
+                ↺ Réinitialiser
               </button>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
 
-        {/* Actions */}
-        <div className="sim-actions">
-          <button className={`sim-btn sim-btn-add ${addingStop ? 'sim-btn-active' : ''}`} onClick={() => setAddingStop(v => !v)}>
-            {addingStop ? '✕ Annuler' : '+ Ajouter arrêt'}
-          </button>
-          <button className="sim-btn sim-btn-reset" onClick={handleReset}>
-            ↺ Réinitialiser
-          </button>
-        </div>
+        {/* ── Onglet Achalandage ── */}
+        {activeTab === 'achalandage' && (
+          <TabAchalandage routes={routes} stops={stops} />
+        )}
+
+        {/* ── Onglet Scénarios ── */}
+        {activeTab === 'scenarios' && (
+          <TabScenarios
+            stops={stops} routes={routes}
+            scenarios={scenarios} onSave={handleSaveScenario}
+          />
+        )}
+
       </aside>
     </div>
   )
