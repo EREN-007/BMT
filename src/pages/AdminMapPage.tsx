@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   MapContainer,
@@ -11,6 +11,8 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { aggregate, AggregationResult } from '@/lib/aggregation'
+import { getRoutes, getStops, ensureSeedData } from '@/lib/storage'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -273,6 +275,40 @@ function AdminMapPage() {
   const [showEquity,   setShowEquity]   = useState(false)
   const [showOD,       setShowOD]       = useState(false)
 
+  // ── Agrégation live ──────────────────────────────────────────────────────
+  const [result,     setResult]     = useState<AggregationResult | null>(null)
+  const [lastUpdate, setLastUpdate] = useState<number>(0)
+
+  const runAggregation = useCallback(() => {
+    ensureSeedData()  // injecte les données de démonstration si localStorage vide
+    const routes = getRoutes()
+    const stops  = getStops()
+    const agg    = aggregate(routes, stops)
+    setResult(agg)
+    setLastUpdate(Date.now())
+  }, [])
+
+  useEffect(() => { runAggregation() }, [runAggregation])
+
+  // Corridors et arrêts : données agrégées si disponibles, fallback sur données statiques
+  const livecorridors = result && result.corridors.length > 0
+    ? result.corridors
+    : CORRIDORS.map(c => ({ ...c, maxCellCount: c.count, label: c.label }))
+
+  const liveStops = result && result.stops.filter(s => s.type === 'busstop').length > 0
+    ? result.stops.filter(s => s.type === 'busstop')
+        .map(s => ({ id: s.id, label: s.label, pos: s.pos as [number,number], count: s.count }))
+    : BUS_STOPS
+
+  const liveStations = result && result.stops.filter(s => s.type === 'station').length > 0
+    ? result.stops.filter(s => s.type === 'station')
+        .map(s => ({ id: s.id, label: s.label, pos: s.pos as [number,number], count: s.count }))
+    : STATIONS
+
+  const MAX_ROUTE_LIVE = Math.max(...livecorridors.map(c => c.count), 1)
+  const MAX_STOP_LIVE  = Math.max(...liveStops.map(s => s.count), 1)
+  const MAX_STA_LIVE   = Math.max(...liveStations.map(s => s.count), 1)
+
   return (
     <div className="db-root">
 
@@ -341,15 +377,15 @@ function AdminMapPage() {
 
           <label className="adm-legend-item">
             <input type="checkbox" checked={showRoutes}   onChange={e => setShowRoutes(e.target.checked)} />
-            <span className="adm-legend-name">Lignes ({CORRIDORS.length})</span>
+            <span className="adm-legend-name">Lignes ({livecorridors.length})</span>
           </label>
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStops}    onChange={e => setShowStops(e.target.checked)} />
-            <span className="adm-legend-name">Arrêts ({BUS_STOPS.length})</span>
+            <span className="adm-legend-name">Arrêts ({liveStops.length})</span>
           </label>
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStations} onChange={e => setShowStations(e.target.checked)} />
-            <span className="adm-legend-name">Stations ({STATIONS.length})</span>
+            <span className="adm-legend-name">Stations ({liveStations.length})</span>
           </label>
 
           <div className="adm-legend-sep" />
@@ -397,10 +433,41 @@ function AdminMapPage() {
           <div className="adm-legend-sep" />
           <p className="adm-legend-title">Données</p>
           <div className="adm-stats-mini">
-            <div className="adm-stat-mini"><span>{CORRIDORS.reduce((a,c) => a + c.count, 0)}</span>tracés citoyens</div>
-            <div className="adm-stat-mini"><span>{BUS_STOPS.reduce((a,s) => a + s.count, 0)}</span>votes arrêts</div>
-            <div className="adm-stat-mini"><span>{STATIONS.reduce((a,s) => a + s.count, 0)}</span>votes stations</div>
+            <div className="adm-stat-mini">
+              <span>{result ? result.totalRoutes : CORRIDORS.reduce((a,c) => a + c.count, 0)}</span>
+              tracés citoyens
+            </div>
+            <div className="adm-stat-mini">
+              <span>{result ? result.stops.filter(s => s.type === 'busstop').length : BUS_STOPS.length}</span>
+              clusters arrêts
+            </div>
+            <div className="adm-stat-mini">
+              <span>{result ? result.stops.filter(s => s.type === 'station').length : STATIONS.length}</span>
+              clusters stations
+            </div>
           </div>
+
+          {result && (
+            <div style={{ padding: '8px 0 4px', fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>
+              <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {livecorridors.length} corridors · {result.gridStats.activeCells} cellules actives
+              </span>
+              <br />
+              Mis à jour {new Date(lastUpdate).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
+
+          <button
+            onClick={runAggregation}
+            style={{
+              marginTop: 8, width: '100%', padding: '7px 0',
+              background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.25)',
+              borderRadius: 8, color: '#FFD700', fontSize: '0.72rem',
+              fontWeight: 700, cursor: 'pointer', letterSpacing: '0.3px',
+            }}
+          >
+            ↺ Rafraîchir les données
+          </button>
         </div>
 
         <button className="db-logout" onClick={() => navigate('/')}>
@@ -437,38 +504,40 @@ function AdminMapPage() {
             </LayersControl.BaseLayer>
           </LayersControl>
 
-          {/* Corridors / lignes */}
-          {showRoutes && CORRIDORS.map(c => (
+          {/* Corridors / lignes — données agrégées */}
+          {showRoutes && livecorridors.map(c => (
             <Polyline
               key={c.id}
               positions={c.points}
               pathOptions={{
-                color:   densityColor(c.count, MAX_ROUTE),
-                weight:  densityWeight(c.count, MAX_ROUTE),
-                opacity: 0.85,
-                lineCap: 'round',
+                color:    densityColor(c.count, MAX_ROUTE_LIVE),
+                weight:   densityWeight(c.count, MAX_ROUTE_LIVE),
+                opacity:  0.85,
+                lineCap:  'round',
                 lineJoin: 'round',
               }}
             >
               <Popup>
-                <div style={{ minWidth: 180 }}>
+                <div style={{ minWidth: 190 }}>
                   <strong>{c.label}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>{c.count} citoyens ont tracé ce corridor</span><br /><br />
-                  <DensityBadge count={c.count} max={MAX_ROUTE} />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {c.count} citoyen{c.count > 1 ? 's' : ''} ont tracé ce corridor
+                  </span><br /><br />
+                  <DensityBadge count={c.count} max={MAX_ROUTE_LIVE} />
                 </div>
               </Popup>
             </Polyline>
           ))}
 
-          {/* Arrêts de bus */}
-          {showStops && BUS_STOPS.map(s => (
+          {/* Arrêts de bus — données agrégées */}
+          {showStops && liveStops.map(s => (
             <CircleMarker
               key={s.id}
               center={s.pos}
-              radius={densityRadius(s.count, MAX_STOP)}
+              radius={densityRadius(s.count, MAX_STOP_LIVE)}
               pathOptions={{
-                color:       densityColor(s.count, MAX_STOP),
-                fillColor:   densityColor(s.count, MAX_STOP),
+                color:       densityColor(s.count, MAX_STOP_LIVE),
+                fillColor:   densityColor(s.count, MAX_STOP_LIVE),
                 fillOpacity: 0.75,
                 weight: 2,
               }}
@@ -476,8 +545,10 @@ function AdminMapPage() {
               <Popup>
                 <div style={{ minWidth: 180 }}>
                   <strong>🚏 {s.label}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>{s.count} citoyens ont placé cet arrêt</span><br /><br />
-                  <DensityBadge count={s.count} max={MAX_STOP} />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {s.count} citoyen{s.count > 1 ? 's' : ''} ont voté pour cet arrêt
+                  </span><br /><br />
+                  <DensityBadge count={s.count} max={MAX_STOP_LIVE} />
                 </div>
               </Popup>
             </CircleMarker>
@@ -541,15 +612,15 @@ function AdminMapPage() {
             </Polyline>
           ))}
 
-          {/* Stations */}
-          {showStations && STATIONS.map(s => (
+          {/* Stations — données agrégées */}
+          {showStations && liveStations.map(s => (
             <CircleMarker
               key={s.id}
               center={s.pos}
-              radius={densityRadius(s.count, MAX_STA) + 3}
+              radius={densityRadius(s.count, MAX_STA_LIVE) + 3}
               pathOptions={{
-                color:       densityColor(s.count, MAX_STA),
-                fillColor:   densityColor(s.count, MAX_STA),
+                color:       densityColor(s.count, MAX_STA_LIVE),
+                fillColor:   densityColor(s.count, MAX_STA_LIVE),
                 fillOpacity: 0.75,
                 weight:      3,
                 dashArray:   '4 3',
@@ -558,8 +629,10 @@ function AdminMapPage() {
               <Popup>
                 <div style={{ minWidth: 180 }}>
                   <strong>🏢 {s.label}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>{s.count} citoyens ont proposé cette station</span><br /><br />
-                  <DensityBadge count={s.count} max={MAX_STA} />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {s.count} citoyen{s.count > 1 ? 's' : ''} ont proposé cette station
+                  </span><br /><br />
+                  <DensityBadge count={s.count} max={MAX_STA_LIVE} />
                 </div>
               </Popup>
             </CircleMarker>

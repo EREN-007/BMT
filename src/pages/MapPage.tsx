@@ -10,6 +10,7 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { saveRoutes, saveStops } from '@/lib/storage'
 
 // Fix Leaflet default icon path broken by Vite bundler
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -482,7 +483,29 @@ function MapPage() {
         )}
 
         {/* Bouton Suivant */}
-        <button className="mp-next-btn" onClick={() => navigate('/page4')} title="Page suivante">
+        <button className="mp-next-btn" onClick={() => {
+          // Générer un identifiant de session unique pour cette soumission
+          const sessionId = `session-${Date.now()}`
+
+          // Sauvegarder les tracés terminés
+          const finishedRoutes = routes.filter(r => r.finished && r.points.length >= 2)
+          if (finishedRoutes.length > 0) {
+            saveRoutes(
+              finishedRoutes.map(r => ({ points: r.points, color: r.color })),
+              sessionId,
+            )
+          }
+
+          // Sauvegarder les arrêts et stations
+          if (stops.length > 0) {
+            saveStops(
+              stops.map(s => ({ pos: s.position, type: s.type, label: s.label })),
+              sessionId,
+            )
+          }
+
+          navigate('/page4')
+        }} title="Page suivante">
           <span>Suivant</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <polyline points="9 18 15 12 9 6"/>
