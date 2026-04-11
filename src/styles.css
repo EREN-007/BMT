@@ -482,6 +482,192 @@ body {
    SPLASH / LANGUAGE CHOICE — Fond animé commun (lc-root)
    ============================================================ */
 
+/* ── Flou du fond quand le banner est ouvert ─────────────────────────────── */
+.lc-blurred {
+  filter: blur(3px);
+  pointer-events: none;
+  user-select: none;
+  transition: filter 0.25s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NOTIFICATION PERMISSION BANNER — bottom sheet
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Overlay plein écran */
+.notif-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Fond semi-transparent */
+.notif-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Carte bottom-sheet */
+.notif-sheet {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: #0d1f3c;
+  border-top: 2px solid rgba(255, 215, 0, 0.35);
+  border-radius: 20px 20px 0 0;
+  padding: 28px 24px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  animation: notifSlideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes notifSlideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Icône cloche */
+.notif-bell {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.12);
+  border: 1.5px solid rgba(255, 215, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.notif-bell svg {
+  width: 26px;
+  height: 26px;
+  color: #FFD700;
+}
+
+/* Compteur de participation */
+.notif-counter {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.notif-counter-num {
+  font-size: 3rem;
+  font-weight: 900;
+  color: #FFD700;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.notif-counter-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Textes */
+.notif-tagline {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.notif-body {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+  line-height: 1.55;
+  margin: 0 0 10px;
+  padding: 0 8px;
+}
+
+.notif-stats {
+  font-size: 0.72rem;
+  color: rgba(255, 215, 0, 0.5);
+  text-align: center;
+  margin: 0 0 20px;
+  letter-spacing: 0.3px;
+}
+
+/* Boutons d'action */
+.notif-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.notif-btn-allow {
+  width: 100%;
+  padding: 14px 0;
+  border-radius: 12px;
+  border: none;
+  background: #FFD700;
+  color: #0a1628;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.12s;
+}
+
+.notif-btn-allow:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.notif-btn-allow:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.notif-btn-allow:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.notif-btn-skip {
+  width: 100%;
+  padding: 12px 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.notif-btn-skip:hover {
+  color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Texte de rassurance */
+.notif-fine-print {
+  font-size: 0.64rem;
+  color: rgba(255, 255, 255, 0.22);
+  text-align: center;
+  line-height: 1.5;
+  padding: 0 8px;
+  margin: 0;
+}
+
 .lc-root {
   min-height: 100dvh;
   display: flex;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { fireSubmissionConfirmation } from '@/lib/participation'
 
 interface FormData {
   nom: string
@@ -37,6 +38,8 @@ function Page4Form() {
     e.preventDefault()
     if (!validate()) return
     setSent(true)
+    // Notification de confirmation si permission accordée
+    fireSubmissionConfirmation('fr')
   }
 
   if (sent) {
