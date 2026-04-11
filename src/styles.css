@@ -104,6 +104,14 @@
   animation: finish-pulse 1.2s ease-in-out infinite;
 }
 
+.mp-tool-results {
+  color: #e6b800 !important;
+  border-color: rgba(230, 184, 0, 0.35) !important;
+}
+.mp-tool-results:hover {
+  background: rgba(230, 184, 0, 0.12) !important;
+}
+
 @keyframes finish-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.3); }
   50%       { box-shadow: 0 0 0 5px rgba(46, 204, 113, 0); }
@@ -1235,6 +1243,25 @@ body {
 .f4-success-sub span {
   color: rgba(255,255,255,0.35);
   font-size: 0.85rem;
+}
+
+.f4-results-btn {
+  margin-top: 16px;
+  padding: 13px 28px;
+  background: #e6b800;
+  border: none;
+  border-radius: 50px;
+  color: #0a1628;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.01em;
+}
+.f4-results-btn:hover {
+  background: #f0c800;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(230,184,0,0.35);
 }
 
 .f4-back-btn {
@@ -3161,4 +3188,278 @@ body {
   .fm-north-arrow,
   .fm-scale-bar,
   .fm-map-legend { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESULTS PAGE  (rp-*)
+   Page publique — carte agrégée + stats de participation
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.rp-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: #0a1628;
+  color: #f0f4ff;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ── Header ── */
+.rp-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  background: rgba(10, 22, 40, 0.95);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.rp-back-btn {
+  flex-shrink: 0;
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,0.08);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: #f0f4ff;
+  transition: background 0.15s;
+}
+.rp-back-btn:hover { background: rgba(255,255,255,0.15); }
+.rp-back-btn svg { width: 18px; height: 18px; }
+
+.rp-header-text { flex: 1; min-width: 0; }
+
+.rp-title {
+  margin: 0;
+  font-size: clamp(1rem, 4vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #f0f4ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rp-subtitle {
+  margin: 1px 0 0;
+  font-size: 0.72rem;
+  color: rgba(240,244,255,0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rp-logo-badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #e6b800;
+  background: rgba(230,184,0,0.12);
+  border: 1px solid rgba(230,184,0,0.3);
+  padding: 4px 9px;
+  border-radius: 6px;
+}
+
+/* ── Stats bar ── */
+.rp-stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 14px 8px;
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  gap: 4px;
+}
+
+.rp-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.rp-stat-num {
+  font-size: clamp(1.3rem, 5vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #e6b800;
+  line-height: 1;
+}
+
+.rp-stat-label {
+  font-size: 0.65rem;
+  color: rgba(240,244,255,0.5);
+  text-align: center;
+  margin-top: 3px;
+  line-height: 1.2;
+  max-width: 72px;
+}
+
+.rp-stat-divider {
+  width: 1px;
+  height: 36px;
+  background: rgba(255,255,255,0.1);
+  flex-shrink: 0;
+}
+
+/* ── Map wrap ── */
+.rp-map-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 52vh;
+}
+
+.rp-leaflet {
+  width: 100%;
+  height: 100%;
+  min-height: 52vh;
+}
+
+.rp-map-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52vh;
+  color: rgba(240,244,255,0.4);
+  font-size: 0.9rem;
+}
+
+/* ── Map legend ── */
+.rp-legend {
+  position: absolute;
+  bottom: 16px;
+  right: 12px;
+  z-index: 999;
+  background: rgba(10, 22, 40, 0.92);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 10px 14px;
+  backdrop-filter: blur(8px);
+  font-size: 0.7rem;
+  color: rgba(240,244,255,0.85);
+  min-width: 130px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.rp-legend-title {
+  font-weight: 700;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(240,244,255,0.5);
+  margin-bottom: 7px;
+}
+
+.rp-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rp-legend-line {
+  display: inline-block;
+  width: 28px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.rp-legend-dot-stop {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #3498db;
+  border: 2px solid #fff;
+  flex-shrink: 0;
+}
+
+/* ── Update line ── */
+.rp-update-line {
+  margin: 0;
+  padding: 8px 20px;
+  font-size: 0.68rem;
+  color: rgba(240,244,255,0.35);
+  background: rgba(10, 22, 40, 0.95);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  text-align: right;
+}
+
+/* ── CTA card ── */
+.rp-cta-card {
+  background: linear-gradient(135deg, rgba(26,60,100,0.6) 0%, rgba(10,22,40,0.9) 100%);
+  border-top: 1px solid rgba(230,184,0,0.2);
+  padding: 28px 24px 36px;
+  text-align: center;
+}
+
+.rp-cta-title {
+  margin: 0 0 10px;
+  font-size: clamp(1.1rem, 4vw, 1.4rem);
+  font-weight: 700;
+  color: #f0f4ff;
+}
+
+.rp-cta-body {
+  margin: 0 0 22px;
+  font-size: 0.88rem;
+  color: rgba(240,244,255,0.6);
+  line-height: 1.55;
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.rp-cta-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.rp-btn-draw,
+.rp-btn-validate {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 24px;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.rp-btn-draw svg,
+.rp-btn-validate svg { width: 16px; height: 16px; }
+
+.rp-btn-draw {
+  background: #e6b800;
+  color: #0a1628;
+}
+.rp-btn-draw:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(230,184,0,0.35);
+}
+
+.rp-btn-validate {
+  background: rgba(255,255,255,0.08);
+  color: #f0f4ff;
+  border: 1px solid rgba(255,255,255,0.18);
+}
+.rp-btn-validate:hover {
+  background: rgba(255,255,255,0.14);
+  transform: translateY(-1px);
+}
+
+/* ── Responsive: tablet+ → split map/stats ── */
+@media (min-width: 640px) {
+  .rp-stats-bar {
+    padding: 18px 32px;
+  }
+  .rp-stat-label { font-size: 0.72rem; }
 }

@@ -69,6 +69,7 @@ function LanguageChoice({ onSelect, to = '/map' }: Props) {
   // ── Sélection de langue ──────────────────────────────────────────────────
   const handleSelect = (lang: 'fr' | 'en') => {
     setSelectedLang(lang)
+    localStorage.setItem('bmt_lang', lang)
 
     // Afficher le banner seulement si :
     //   • l'API est disponible

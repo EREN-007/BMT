@@ -408,6 +408,23 @@ function MapPage() {
           <span>{stops.filter(s => s.type === 'busstop').length} arrêt{stops.filter(s => s.type === 'busstop').length !== 1 ? 's' : ''}</span>
           <span>{stops.filter(s => s.type === 'station').length} gare{stops.filter(s => s.type === 'station').length !== 1 ? 's' : ''}</span>
         </div>
+
+        <div className="mp-toolbar-divider" />
+
+        {/* Voir les résultats */}
+        <button
+          className="mp-tool-btn mp-tool-results"
+          onClick={() => navigate('/results')}
+          title="Voir la carte citoyenne"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+            <line x1="11" y1="8" x2="11" y2="14"/>
+            <line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+          <span>Résultats</span>
+        </button>
       </aside>
 
       {/* ── Map ── */}

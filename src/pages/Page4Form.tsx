@@ -57,6 +57,9 @@ function Page4Form() {
             Votre suggestion a bien été reçue.<br/>
             <span>Thank you! Your suggestion has been received.</span>
           </p>
+          <button className="f4-results-btn" onClick={() => navigate('/results')}>
+            Voir la carte citoyenne →
+          </button>
           <button className="f4-back-btn" onClick={() => navigate('/map')}>
             ← Retour à la carte
           </button>
