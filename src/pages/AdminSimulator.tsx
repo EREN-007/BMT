@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MapContainer, TileLayer, Circle, Marker, Popup, Polyline, useMapEvents,
+  MapContainer, TileLayer, Circle, Marker, Popup, Polyline, Rectangle, useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { computeCoverage, CoverageResult } from '@/lib/coverage'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -400,13 +401,23 @@ function AdminSimulator() {
   const [showRoutes,   setShowRoutes]   = useState(true)
   const [addingStop,   setAddingStop]   = useState(false)
   const [lastImpact,   setLastImpact]   = useState<{ id: string; type: 'gain'|'loss' } | null>(null)
-  const [activeTab,    setActiveTab]    = useState<TabId>('simulation')
-  const [scenarios,    setScenarios]    = useState<{ A: Scenario | null; B: Scenario | null }>({ A: null, B: null })
+  const [activeTab,      setActiveTab]      = useState<TabId>('simulation')
+  const [scenarios,      setScenarios]      = useState<{ A: Scenario | null; B: Scenario | null }>({ A: null, B: null })
+  const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null)
+  const [showDeadZones,  setShowDeadZones]  = useState(true)
   const counterRef = useRef(100)
 
-  const metrics      = computeMetrics(stops)
-  const impactColor  = metrics.coveragePct >= 70 ? '#2ecc71' : metrics.coveragePct >= 45 ? '#f39c12' : '#e74c3c'
-  const impactLabel  = metrics.coveragePct >= 70 ? 'Excellent' : metrics.coveragePct >= 45 ? 'Acceptable' : 'Insuffisant'
+  // ── Moteur de couverture — recalcul à chaque changement d'arrêts ──────────
+  useEffect(() => {
+    const result = computeCoverage(stops)
+    setCoverageResult(result)
+  }, [stops])
+
+  const metrics     = computeMetrics(stops)
+  const pct         = coverageResult?.coveragePct ?? metrics.coveragePct
+  const dzCount     = coverageResult?.deadZones.length ?? metrics.deadZones
+  const impactColor = pct >= 70 ? '#2ecc71' : pct >= 45 ? '#f39c12' : '#e74c3c'
+  const impactLabel = pct >= 70 ? 'Excellent' : pct >= 45 ? 'Acceptable' : 'Insuffisant'
 
   const handleDragEnd = useCallback((id: string, pos: [number, number]) => {
     setStops(prev => prev.map(s => s.id === id ? { ...s, pos } : s))
@@ -456,14 +467,14 @@ function AdminSimulator() {
         id: slot, label: `Scénario ${slot}`,
         stops: JSON.parse(JSON.stringify(stops)),
         routes: JSON.parse(JSON.stringify(routes)),
-        coveragePct:  m.coveragePct,
+        coveragePct:  coverageResult?.coveragePct ?? m.coveragePct,
         ridership:    computeTotalRidership(routes, stops, false),
-        deadZones:    m.deadZones,
+        deadZones:    coverageResult?.deadZones.length ?? m.deadZones,
         activeStops:  m.active,
         activeRoutes: routes.filter(r => r.active).length,
       },
     }))
-  }, [stops, routes])
+  }, [stops, routes, coverageResult])
 
   const TABS: { id: TabId; label: string }[] = [
     { id: 'simulation',  label: 'Simulation'  },
@@ -529,6 +540,20 @@ function AdminSimulator() {
             />
           ))}
 
+          {/* Zones mortes — clusters de population non desservis */}
+          {showDeadZones && coverageResult?.deadZones.map(dz => (
+            <Rectangle
+              key={dz.id}
+              bounds={dz.bounds}
+              pathOptions={{
+                color:       dz.urgency === 'high' ? '#e74c3c' : dz.urgency === 'medium' ? '#f39c12' : '#888',
+                fillColor:   dz.urgency === 'high' ? '#e74c3c' : dz.urgency === 'medium' ? '#f39c12' : '#888',
+                fillOpacity: dz.urgency === 'high' ? 0.18 : dz.urgency === 'medium' ? 0.12 : 0.06,
+                weight: 1.5, dashArray: '5 4',
+              }}
+            />
+          ))}
+
           <AddStopOnClick adding={addingStop} onAdd={handleAddStop} />
         </MapContainer>
 
@@ -555,8 +580,8 @@ function AdminSimulator() {
 
         {/* Score couverture (toujours visible) */}
         <div className="sim-score-card">
-          <div className="sim-score-ring" style={{ '--score-color': impactColor, '--score-pct': metrics.coveragePct } as React.CSSProperties}>
-            <span className="sim-score-value">{metrics.coveragePct}%</span>
+          <div className="sim-score-ring" style={{ '--score-color': impactColor, '--score-pct': pct } as React.CSSProperties}>
+            <span className="sim-score-value">{pct}%</span>
             <span className="sim-score-unit">couverture</span>
           </div>
           <div className="sim-score-info">
@@ -564,7 +589,12 @@ function AdminSimulator() {
             <div className="sim-score-details">
               <span>🚏 {metrics.buses} arrêts actifs</span>
               <span>🏢 {metrics.stations} stations actives</span>
-              <span>⚠️ {metrics.deadZones} zone{metrics.deadZones !== 1 ? 's' : ''} morte{metrics.deadZones !== 1 ? 's' : ''}</span>
+              <span>⚠️ {dzCount} zone{dzCount !== 1 ? 's' : ''} morte{dzCount !== 1 ? 's' : ''}</span>
+              {coverageResult && (
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem' }}>
+                  calc. {coverageResult.computeTimeMs} ms
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -605,6 +635,12 @@ function AdminSimulator() {
                 <span>Lignes de bus</span>
                 <button className={`sim-toggle ${showRoutes ? 'sim-toggle-on' : ''}`} onClick={() => setShowRoutes(v => !v)}>
                   {showRoutes ? 'ON' : 'OFF'}
+                </button>
+              </label>
+              <label className="sim-toggle-row">
+                <span>Zones mortes {dzCount > 0 ? `(${dzCount})` : ''}</span>
+                <button className={`sim-toggle ${showDeadZones ? 'sim-toggle-on' : ''}`} onClick={() => setShowDeadZones(v => !v)}>
+                  {showDeadZones ? 'ON' : 'OFF'}
                 </button>
               </label>
             </div>
