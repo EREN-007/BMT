@@ -13,6 +13,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { aggregate, AggregationResult } from '@/lib/aggregation'
 import { getRoutes, getStops, ensureSeedData } from '@/lib/storage'
+import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -278,6 +279,7 @@ function AdminMapPage() {
   // ── Agrégation live ──────────────────────────────────────────────────────
   const [result,     setResult]     = useState<AggregationResult | null>(null)
   const [lastUpdate, setLastUpdate] = useState<number>(0)
+  const [odMatrix,   setOdMatrix]   = useState<ODMatrix | null>(null)
 
   const runAggregation = useCallback(() => {
     ensureSeedData()  // injecte les données de démonstration si localStorage vide
@@ -286,6 +288,11 @@ function AdminMapPage() {
     const agg    = aggregate(routes, stops)
     setResult(agg)
     setLastUpdate(Date.now())
+
+    // Matrice O-D : corridors agrégés → paires couvertes, tracés citoyens → flux
+    const coveredPairs = computeCoveredPairs(agg.corridors, OD_ZONES)
+    const odm          = buildODMatrix(routes, OD_ZONES, coveredPairs)
+    setOdMatrix(odm)
   }, [])
 
   useEffect(() => { runAggregation() }, [runAggregation])
@@ -410,24 +417,30 @@ function AdminMapPage() {
           </label>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Données O-D</p>
+          <p className="adm-legend-title">Matrice O-D</p>
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span style={{ display:'inline-block', width:24, height:3, background:'#3498db', opacity:0.9, marginRight:8, borderRadius:2 }} />
-              <span className="adm-heat-label">Fort flux</span>
+              <span className="adm-heat-label">Desservi</span>
             </div>
             <div className="adm-heat-row">
-              <span style={{ display:'inline-block', width:24, height:2, background:'#3498db', opacity:0.6, marginRight:8, borderRadius:2 }} />
-              <span className="adm-heat-label">Flux moyen</span>
-            </div>
-            <div className="adm-heat-row">
-              <span style={{ display:'inline-block', width:24, height:1, background:'#3498db', opacity:0.4, marginRight:8, borderRadius:2 }} />
-              <span className="adm-heat-label">Faible flux</span>
+              <span style={{ display:'inline-block', width:24, height:2, background:'#e67e22', opacity:0.8, marginRight:8, borderRadius:2, borderTop:'1px dashed #e67e22' }} />
+              <span className="adm-heat-label">Non desservi</span>
             </div>
           </div>
+          {odMatrix && (
+            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', margin: '4px 0 6px' }}>
+              {odMatrix.cells.length} corridors · {odMatrix.coveragePct}% couverture
+              {odMatrix.unmetDemand.length > 0 && (
+                <span style={{ color: '#e67e22' }}> · {odMatrix.unmetDemand.length} lacunes</span>
+              )}
+            </div>
+          )}
           <label className="adm-legend-item">
             <input type="checkbox" checked={showOD} onChange={e => setShowOD(e.target.checked)} />
-            <span className="adm-legend-name">Flux O-D ({OD_FLOWS.length})</span>
+            <span className="adm-legend-name">
+              Lignes de désir ({odMatrix ? odMatrix.cells.length : OD_FLOWS.length})
+            </span>
           </label>
 
           <div className="adm-legend-sep" />
@@ -586,31 +599,72 @@ function AdminMapPage() {
             </Rectangle>
           ))}
 
-          {/* Flux Origine-Destination */}
-          {showOD && OD_FLOWS.map(f => (
-            <Polyline
-              key={f.id}
-              positions={[f.from, f.to]}
-              pathOptions={{
-                color:   '#3498db',
-                weight:  odWeight(f.count),
-                opacity: odOpacity(f.count),
-                dashArray: '8 5',
-              }}
-            >
-              <Popup>
-                <div style={{ minWidth: 190 }}>
-                  <strong>{f.label}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {f.count} déplacements enregistrés
-                  </span><br />
-                  <span style={{ color: '#3498db', fontSize: '0.78rem', display: 'block', marginTop: 4 }}>
-                    Données issues des soumissions citoyennes
-                  </span>
-                </div>
-              </Popup>
-            </Polyline>
-          ))}
+          {/* Lignes de désir O-D — données calculées depuis les tracés citoyens */}
+          {showOD && (() => {
+            if (odMatrix) {
+              const zoneMap   = new Map(odMatrix.zones.map(z => [z.id, z]))
+              const maxTrips  = odMatrix.cells[0]?.trips ?? 1
+              return odMatrix.cells.map(cell => {
+                const fromZone = zoneMap.get(cell.fromZoneId)
+                const toZone   = zoneMap.get(cell.toZoneId)
+                if (!fromZone || !toZone) return null
+                const ratio   = cell.trips / maxTrips
+                const weight  = Math.round(1 + ratio * 7)
+                const opacity = 0.25 + ratio * 0.65
+                return (
+                  <Polyline
+                    key={`od-${cell.fromZoneId}|${cell.toZoneId}`}
+                    positions={[fromZone.center, toZone.center]}
+                    pathOptions={{
+                      color:     cell.covered ? '#3498db' : '#e67e22',
+                      weight:    Math.min(weight, 8),
+                      opacity,
+                      dashArray: cell.covered ? undefined : '8 5',
+                    }}
+                  >
+                    <Popup>
+                      <div style={{ minWidth: 200 }}>
+                        <strong>{fromZone.name} → {toZone.name}</strong><br />
+                        <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                          {cell.trips.toLocaleString()} voy/j estimés · {cell.rawCount} tracé{cell.rawCount > 1 ? 's' : ''}
+                        </span><br />
+                        <span style={{
+                          display: 'inline-block', marginTop: 6, padding: '2px 8px',
+                          borderRadius: 8, fontSize: '0.75rem', fontWeight: 700,
+                          background: cell.covered ? '#3498db22' : '#e67e2222',
+                          color: cell.covered ? '#3498db' : '#e67e22',
+                          border: `1px solid ${cell.covered ? '#3498db55' : '#e67e2255'}`,
+                        }}>
+                          {cell.covered ? '✓ Desservi' : '⚠ Non desservi'}
+                        </span>
+                      </div>
+                    </Popup>
+                  </Polyline>
+                )
+              })
+            }
+
+            // Fallback statique (avant chargement)
+            return OD_FLOWS.map(f => (
+              <Polyline
+                key={f.id}
+                positions={[f.from, f.to]}
+                pathOptions={{
+                  color: '#3498db', weight: odWeight(f.count),
+                  opacity: odOpacity(f.count), dashArray: '8 5',
+                }}
+              >
+                <Popup>
+                  <div style={{ minWidth: 190 }}>
+                    <strong>{f.label}</strong><br />
+                    <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                      {f.count} déplacements enregistrés
+                    </span>
+                  </div>
+                </Popup>
+              </Polyline>
+            ))
+          })()}
 
           {/* Stations — données agrégées */}
           {showStations && liveStations.map(s => (

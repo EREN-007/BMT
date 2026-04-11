@@ -6,6 +6,10 @@ import {
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { computeCoverage, CoverageResult } from '@/lib/coverage'
+import {
+  buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES,
+} from '@/lib/od'
+import { getRoutes, ensureSeedData } from '@/lib/storage'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -28,7 +32,7 @@ interface SimRoute {
   color: string
 }
 
-type TabId = 'simulation' | 'achalandage' | 'scenarios'
+type TabId = 'simulation' | 'achalandage' | 'scenarios' | 'od'
 
 interface Scenario {
   id: string
@@ -391,6 +395,121 @@ function TabScenarios({
   )
 }
 
+// ─── Tab : Matrice O-D ───────────────────────────────────────────────────────
+
+function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
+  if (!odMatrix) {
+    return (
+      <div className="sim-tab-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>Chargement O-D…</p>
+      </div>
+    )
+  }
+
+  const zoneMap  = new Map(odMatrix.zones.map(z => [z.id, z.name]))
+  const maxTrips = odMatrix.cells[0]?.trips ?? 1
+
+  const covColor = odMatrix.coveragePct >= 60 ? '#2ecc71'
+    : odMatrix.coveragePct >= 35 ? '#f39c12' : '#e74c3c'
+
+  return (
+    <div className="sim-tab-content">
+
+      {/* ── KPI ── */}
+      <div className="od-summary-card">
+        <div className="od-kpi-row">
+          <div className="od-kpi">
+            <span className="od-kpi-value">{odMatrix.totalTrips.toLocaleString()}</span>
+            <span className="od-kpi-label">voyages/j estimés</span>
+          </div>
+          <div className="od-kpi">
+            <span className="od-kpi-value" style={{ color: covColor }}>{odMatrix.coveragePct}%</span>
+            <span className="od-kpi-label">avec desserte</span>
+          </div>
+        </div>
+
+        {/* Barre couverture */}
+        <div className="od-progress-track">
+          <div className="od-progress-fill" style={{ width: `${odMatrix.coveragePct}%`, background: covColor }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', marginTop: 3 }}>
+          <span>0</span>
+          <span>{odMatrix.coveredTrips.toLocaleString()} desservis</span>
+          <span>{odMatrix.totalTrips.toLocaleString()}</span>
+        </div>
+      </div>
+
+      {/* ── Top corridors ── */}
+      <p className="sim-section-title">Corridors les plus demandés</p>
+      <div className="od-corridor-list">
+        {odMatrix.topCorridors.map(cell => {
+          const from  = zoneMap.get(cell.fromZoneId) ?? cell.fromZoneId
+          const to    = zoneMap.get(cell.toZoneId)   ?? cell.toZoneId
+          const width = Math.round((cell.trips / maxTrips) * 100)
+          return (
+            <div key={`${cell.fromZoneId}|${cell.toZoneId}`} className="od-corridor-item">
+              <div className="od-corridor-header">
+                <span className="od-corridor-name">{from} → {to}</span>
+                <span className={`od-corridor-badge ${cell.covered ? 'od-badge-ok' : 'od-badge-gap'}`}>
+                  {cell.covered ? '✓' : '⚠'}
+                </span>
+              </div>
+              <div className="od-bar-track">
+                <div className="od-bar-fill" style={{
+                  width: `${width}%`,
+                  background: cell.covered ? '#3498db' : '#e74c3c',
+                }} />
+              </div>
+              <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                {cell.trips.toLocaleString()} voy/j · {cell.rawCount} tracé{cell.rawCount > 1 ? 's' : ''} citoyen{cell.rawCount > 1 ? 's' : ''}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Demande non desservie ── */}
+      {odMatrix.unmetDemand.length > 0 && (
+        <>
+          <p className="sim-section-title" style={{ marginTop: 14 }}>Demande non desservie</p>
+          <div className="od-corridor-list">
+            {odMatrix.unmetDemand.map(cell => {
+              const from = zoneMap.get(cell.fromZoneId) ?? cell.fromZoneId
+              const to   = zoneMap.get(cell.toZoneId)   ?? cell.toZoneId
+              return (
+                <div key={`unmet-${cell.fromZoneId}|${cell.toZoneId}`} className="od-corridor-item od-item-gap">
+                  <div className="od-corridor-header">
+                    <span className="od-corridor-name">{from} → {to}</span>
+                    <span className="od-corridor-trips">{cell.trips.toLocaleString()} voy/j</span>
+                  </div>
+                  <div style={{ fontSize: '0.62rem', color: '#e74c3c', marginTop: 2 }}>
+                    Aucune desserte directe · {cell.rawCount} citoyen{cell.rawCount > 1 ? 's' : ''} concerné{cell.rawCount > 1 ? 's' : ''}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {odMatrix.unmetDemand.length === 0 && (
+        <div style={{
+          marginTop: 12, padding: '10px 12px', borderRadius: 8,
+          background: 'rgba(46,204,113,0.07)', border: '1px solid rgba(46,204,113,0.2)',
+          fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)',
+        }}>
+          <span style={{ color: '#2ecc71', fontWeight: 700 }}>Excellent ! </span>
+          Tous les corridors prioritaires sont desservis par les lignes actives.
+        </div>
+      )}
+
+      <div style={{ fontSize: '0.60rem', color: 'rgba(255,255,255,0.18)', marginTop: 10 }}>
+        calc. {odMatrix.computeTimeMs} ms · {odMatrix.cells.length} paires · EXPANSION ×{50}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function AdminSimulator() {
@@ -405,13 +524,29 @@ function AdminSimulator() {
   const [scenarios,      setScenarios]      = useState<{ A: Scenario | null; B: Scenario | null }>({ A: null, B: null })
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null)
   const [showDeadZones,  setShowDeadZones]  = useState(true)
-  const counterRef = useRef(100)
+  const [odMatrix,       setOdMatrix]       = useState<ODMatrix | null>(null)
+  const counterRef      = useRef(100)
+  const citizenRoutesRef = useRef<Array<{ points: [number, number][] }>>([])
 
   // ── Moteur de couverture — recalcul à chaque changement d'arrêts ──────────
   useEffect(() => {
     const result = computeCoverage(stops)
     setCoverageResult(result)
   }, [stops])
+
+  // ── Chargement des tracés citoyens (une seule fois au montage) ────────────
+  useEffect(() => {
+    ensureSeedData()
+    citizenRoutesRef.current = getRoutes()
+  }, [])
+
+  // ── Matrice O-D — recalcul quand les lignes actives changent ─────────────
+  // Les paires couvertes dépendent des lignes SimRoute actives.
+  useEffect(() => {
+    const coveredPairs = computeCoveredPairs(routes, OD_ZONES)
+    const matrix       = buildODMatrix(citizenRoutesRef.current, OD_ZONES, coveredPairs)
+    setOdMatrix(matrix)
+  }, [routes])
 
   const metrics     = computeMetrics(stops)
   const pct         = coverageResult?.coveragePct ?? metrics.coveragePct
@@ -480,6 +615,7 @@ function AdminSimulator() {
     { id: 'simulation',  label: 'Simulation'  },
     { id: 'achalandage', label: 'Achalandage' },
     { id: 'scenarios',   label: 'Scénarios'   },
+    { id: 'od',          label: 'Matrice O-D' },
   ]
 
   return (
@@ -714,6 +850,11 @@ function AdminSimulator() {
             stops={stops} routes={routes}
             scenarios={scenarios} onSave={handleSaveScenario}
           />
+        )}
+
+        {/* ── Onglet Matrice O-D ── */}
+        {activeTab === 'od' && (
+          <TabOD odMatrix={odMatrix} />
         )}
 
       </aside>
