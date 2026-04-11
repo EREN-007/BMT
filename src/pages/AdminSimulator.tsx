@@ -12,6 +12,7 @@ import {
 import {
   computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
 } from '@/lib/equity'
+import { computeRidership, RidershipResult } from '@/lib/ridership'
 import { getRoutes, ensureSeedData } from '@/lib/storage'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -215,46 +216,71 @@ function AddStopOnClick({ adding, onAdd }: { adding: boolean; onAdd: (pos: [numb
 
 // ─── Tab : Achalandage ────────────────────────────────────────────────────────
 
-function TabAchalandage({ routes, stops }: { routes: SimRoute[]; stops: SimStop[] }) {
+function TabAchalandage({
+  ridershipResult,
+}: {
+  ridershipResult: RidershipResult | null
+}) {
   const [peak, setPeak] = useState(false)
 
-  const total    = computeTotalRidership(routes, stops, peak)
-  const maxRoute = Math.max(...routes.map(r => computeRouteRidership(r, stops, peak)), 1)
+  if (!ridershipResult) {
+    return (
+      <div className="sim-tab-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>Calcul achalandage…</p>
+      </div>
+    )
+  }
 
-  const insight = (() => {
-    const active = routes.filter(r => r.active)
-    if (active.length === 0) return 'Aucune ligne active.'
-    const best = active.reduce((a, b) =>
-      computeRouteRidership(a, stops, false) >= computeRouteRidership(b, stops, false) ? a : b)
-    return `${best.label} est la plus achalandée.`
-  })()
+  const displayed  = peak ? ridershipResult.totalPeakRiders : ridershipResult.totalDailyRiders
+  const maxRiders  = Math.max(...ridershipResult.routes.map(r => peak ? r.peakRiders : r.dailyRiders), 1)
+  const fbrColor   = ridershipResult.fareboxRecovery >= 25 ? '#2ecc71'
+    : ridershipResult.fareboxRecovery >= 12 ? '#f39c12' : '#e74c3c'
 
   return (
     <div className="sim-tab-content">
-      {/* Carte total */}
+
+      {/* ── Total ── */}
       <div className="sim-total-card">
-        <div className="sim-total-value">{total.toLocaleString()}</div>
-        <div className="sim-total-label">passagers / jour estimés</div>
+        <div className="sim-total-value">{displayed.toLocaleString()}</div>
+        <div className="sim-total-label">
+          {peak ? 'montées / heure de pointe' : 'passagers / jour estimés'}
+        </div>
       </div>
 
-      {/* Toggle pointe */}
-      <div className="sim-toggle-row" style={{ marginBottom: 14 }}>
+      {/* ── Toggle pointe ── */}
+      <div className="sim-toggle-row" style={{ marginBottom: 10 }}>
         <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>
-          Heures de pointe (×{PEAK_FACTOR})
+          Heure de pointe (×2,9 h AM+PM)
         </span>
         <button className={`sim-toggle ${peak ? 'sim-toggle-on' : ''}`} onClick={() => setPeak(v => !v)}>
           {peak ? 'ON' : 'OFF'}
         </button>
       </div>
 
-      {/* Barres par ligne */}
+      {/* ── Indicateurs financiers ── */}
+      <div className="rid-fin-card">
+        <div className="rid-fin-row">
+          <span>Recettes billetterie</span>
+          <strong>{ridershipResult.systemRevenue.toLocaleString()} $/j</strong>
+        </div>
+        <div className="rid-fin-row">
+          <span>Récupération tarifaire</span>
+          <strong style={{ color: fbrColor }}>{ridershipResult.fareboxRecovery} %</strong>
+        </div>
+        <div className="rid-fin-row">
+          <span>Parc min. heure de pointe</span>
+          <strong>{ridershipResult.busesRequired} autobus</strong>
+        </div>
+      </div>
+
+      {/* ── Barres par ligne ── */}
       <p className="sim-section-title">Achalandage par ligne</p>
       <div className="sim-ridership-list">
-        {routes.map(r => {
-          const val   = computeRouteRidership(r, stops, peak)
-          const width = r.active ? Math.round((val / maxRoute) * 100) : 0
+        {ridershipResult.routes.map(r => {
+          const val   = peak ? r.peakRiders : r.dailyRiders
+          const width = r.active ? Math.round((val / maxRiders) * 100) : 0
           return (
-            <div key={r.id} className="sim-ridership-item">
+            <div key={r.routeId} className="sim-ridership-item">
               <div className="sim-ridership-header">
                 <span className="sim-ridership-name">{r.label}</span>
                 <span className="sim-ridership-count">
@@ -267,22 +293,36 @@ function TabAchalandage({ routes, stops }: { routes: SimRoute[]; stops: SimStop[
                   style={{ width: `${width}%`, background: r.active ? r.color : '#333' }}
                 />
               </div>
+              {r.active && (
+                <div className="rid-route-meta">
+                  Part modale {r.avgModeSplit.toFixed(1)} % · {r.revenuePerDay.toLocaleString()} $/j
+                </div>
+              )}
             </div>
           )
         })}
       </div>
 
-      {/* Insight */}
-      <div style={{
-        marginTop: 14, padding: '10px 12px', borderRadius: 8,
-        background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.15)',
-        fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.5,
-      }}>
-        <span style={{ color: '#FFD700', fontWeight: 700 }}>Analyse : </span>
-        {insight}
-        {' '}Activez la ligne D pour desservir Riverview (+{computeRouteRidership(
-          { ...routes.find(r => r.id === 'r4')!, active: true }, stops, peak
-        ).toLocaleString()} pass./j).
+      {/* ── Analyse ── */}
+      {ridershipResult.topRoute && (
+        <div style={{
+          marginTop: 12, padding: '10px 12px', borderRadius: 8,
+          background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.15)',
+          fontSize: '0.73rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.5,
+        }}>
+          <span style={{ color: '#FFD700', fontWeight: 700 }}>Analyse : </span>
+          {ridershipResult.topRoute.label} génère le plus de montées (
+          {ridershipResult.topRoute.dailyRiders.toLocaleString()} pass./j).
+          {ridershipResult.fareboxRecovery < 20 && (
+            <span style={{ color: '#f39c12' }}>
+              {' '}La récupération tarifaire ({ridershipResult.fareboxRecovery} %) est sous le seuil recommandé (20 %).
+            </span>
+          )}
+        </div>
+      )}
+
+      <div style={{ fontSize: '0.60rem', color: 'rgba(255,255,255,0.18)', marginTop: 8 }}>
+        calc. {ridershipResult.computeTimeMs} ms · base 0,06 voy/résident/j
       </div>
     </div>
   )
@@ -635,7 +675,8 @@ function AdminSimulator() {
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null)
   const [showDeadZones,  setShowDeadZones]  = useState(true)
   const [odMatrix,       setOdMatrix]       = useState<ODMatrix | null>(null)
-  const [equityResult,   setEquityResult]   = useState<EquityResult | null>(null)
+  const [equityResult,    setEquityResult]   = useState<EquityResult | null>(null)
+  const [ridershipResult, setRidershipResult] = useState<RidershipResult | null>(null)
   const counterRef      = useRef(100)
   const citizenRoutesRef = useRef<Array<{ points: [number, number][] }>>([])
 
@@ -658,12 +699,18 @@ function AdminSimulator() {
   }, [])
 
   // ── Matrice O-D — recalcul quand les lignes actives changent ─────────────
-  // Les paires couvertes dépendent des lignes SimRoute actives.
   useEffect(() => {
     const coveredPairs = computeCoveredPairs(routes, OD_ZONES)
     const matrix       = buildODMatrix(citizenRoutesRef.current, OD_ZONES, coveredPairs)
     setOdMatrix(matrix)
   }, [routes])
+
+  // ── Achalandage — recalcul quand lignes OU résultats équité/OD changent ──
+  useEffect(() => {
+    if (!equityResult) return
+    const result = computeRidership(routes, equityResult.scores, odMatrix, OD_ZONES, EQ_ZONES)
+    setRidershipResult(result)
+  }, [routes, equityResult, odMatrix])
 
   const metrics     = computeMetrics(stops)
   const pct         = coverageResult?.coveragePct ?? metrics.coveragePct
@@ -720,13 +767,13 @@ function AdminSimulator() {
         stops: JSON.parse(JSON.stringify(stops)),
         routes: JSON.parse(JSON.stringify(routes)),
         coveragePct:  coverageResult?.coveragePct ?? m.coveragePct,
-        ridership:    computeTotalRidership(routes, stops, false),
+        ridership:    ridershipResult?.totalDailyRiders ?? computeTotalRidership(routes, stops, false),
         deadZones:    coverageResult?.deadZones.length ?? m.deadZones,
         activeStops:  m.active,
         activeRoutes: routes.filter(r => r.active).length,
       },
     }))
-  }, [stops, routes, coverageResult])
+  }, [stops, routes, coverageResult, ridershipResult])
 
   const TABS: { id: TabId; label: string }[] = [
     { id: 'simulation',  label: 'Simulation'  },
@@ -959,7 +1006,7 @@ function AdminSimulator() {
 
         {/* ── Onglet Achalandage ── */}
         {activeTab === 'achalandage' && (
-          <TabAchalandage routes={routes} stops={stops} />
+          <TabAchalandage ridershipResult={ridershipResult} />
         )}
 
         {/* ── Onglet Scénarios ── */}

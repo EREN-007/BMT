@@ -2651,6 +2651,45 @@ body {
   font-weight: 600;
 }
 
+/* ── Achalandage — moteur complet ───────────────────────────────────────── */
+
+.rid-fin-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.rid-fin-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 0.73rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.rid-fin-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.rid-fin-row span {
+  color: rgba(255,255,255,0.45);
+}
+
+.rid-fin-row strong {
+  color: rgba(255,255,255,0.85);
+  font-weight: 700;
+}
+
+.rid-route-meta {
+  font-size: 0.60rem;
+  color: rgba(255,255,255,0.28);
+  margin-top: 2px;
+}
+
 /* ── Équité — onglet Simulateur ─────────────────────────────────────────── */
 
 .eq-kpi-card {
