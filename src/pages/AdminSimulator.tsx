@@ -9,6 +9,9 @@ import { computeCoverage, CoverageResult } from '@/lib/coverage'
 import {
   buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES,
 } from '@/lib/od'
+import {
+  computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
+} from '@/lib/equity'
 import { getRoutes, ensureSeedData } from '@/lib/storage'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -32,7 +35,7 @@ interface SimRoute {
   color: string
 }
 
-type TabId = 'simulation' | 'achalandage' | 'scenarios' | 'od'
+type TabId = 'simulation' | 'achalandage' | 'scenarios' | 'od' | 'equite'
 
 interface Scenario {
   id: string
@@ -395,6 +398,113 @@ function TabScenarios({
   )
 }
 
+// ─── Tab : Équité ────────────────────────────────────────────────────────────
+
+function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
+  if (!equityResult) {
+    return (
+      <div className="sim-tab-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>Calcul équité…</p>
+      </div>
+    )
+  }
+
+  const wg       = equityResult.weightedGap
+  const wgColor  = wg >= 15 ? '#e74c3c' : wg >= 5 ? '#f39c12' : '#2ecc71'
+
+  return (
+    <div className="sim-tab-content">
+
+      {/* ── KPI ── */}
+      <div className="eq-kpi-card">
+        <div className="eq-kpi-row">
+          <div className="eq-kpi">
+            <span className="eq-kpi-value" style={{ color: wgColor }}>
+              {wg > 0 ? '+' : ''}{wg}
+            </span>
+            <span className="eq-kpi-label">écart pondéré</span>
+          </div>
+          <div className="eq-kpi">
+            <span className="eq-kpi-value" style={{ color: equityResult.criticalZones.length > 0 ? '#e74c3c' : '#2ecc71' }}>
+              {equityResult.criticalZones.length}
+            </span>
+            <span className="eq-kpi-label">zones critiques</span>
+          </div>
+          <div className="eq-kpi">
+            <span className="eq-kpi-value">{equityResult.avgServiceScore}%</span>
+            <span className="eq-kpi-label">service moyen</span>
+          </div>
+        </div>
+
+        {equityResult.criticalZones.length > 0 ? (
+          <div style={{
+            marginTop: 8, padding: '6px 10px', borderRadius: 6,
+            background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.2)',
+            fontSize: '0.70rem', color: '#e74c3c',
+          }}>
+            ⚠ Priorité : {equityResult.criticalZones[0].zone.name} (écart +{equityResult.criticalZones[0].gap} pts)
+          </div>
+        ) : (
+          <div style={{
+            marginTop: 8, padding: '6px 10px', borderRadius: 6,
+            background: 'rgba(46,204,113,0.07)', border: '1px solid rgba(46,204,113,0.2)',
+            fontSize: '0.70rem', color: '#2ecc71',
+          }}>
+            ✓ Aucune zone en déficit critique
+          </div>
+        )}
+      </div>
+
+      {/* ── Zones triées par écart ── */}
+      <p className="sim-section-title">Équité par zone</p>
+      <div className="eq-zone-list">
+        {equityResult.scores.map(score => {
+          const color = gapLevelColor(score.gapLevel)
+          const label = gapLevelLabel(score.gapLevel)
+          return (
+            <div key={score.zone.id} className={`eq-zone-item eq-item-${score.gapLevel}`}>
+              <div className="eq-zone-header">
+                <span className="eq-zone-name">{score.zone.name}</span>
+                <span className="eq-zone-badge" style={{ color, borderColor: `${color}55`, background: `${color}15` }}>
+                  {label}
+                </span>
+              </div>
+
+              {/* Besoin */}
+              <div className="eq-bar-row">
+                <span className="eq-bar-label">Besoin</span>
+                <div className="eq-bar-track">
+                  <div className="eq-bar-fill" style={{ width: `${score.needScore}%`, background: '#c0392b' }} />
+                </div>
+                <span className="eq-bar-val">{score.needScore}</span>
+              </div>
+              {/* Service */}
+              <div className="eq-bar-row">
+                <span className="eq-bar-label">Service</span>
+                <div className="eq-bar-track">
+                  <div className="eq-bar-fill" style={{ width: `${score.serviceScore}%`, background: color }} />
+                </div>
+                <span className="eq-bar-val">{score.serviceScore}</span>
+              </div>
+
+              <div className="eq-gap-line" style={{ color }}>
+                Écart : {score.gap > 0 ? '+' : ''}{score.gap} pts
+                <span style={{ color: 'rgba(255,255,255,0.25)', marginLeft: 8 }}>
+                  · rev. {score.zone.income.toLocaleString()} $ · {score.zone.seniors}% aînés
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ fontSize: '0.60rem', color: 'rgba(255,255,255,0.18)', marginTop: 10 }}>
+        calc. {equityResult.computeTimeMs} ms · {equityResult.scores.length} zones · besoin moy. {equityResult.avgNeedScore}
+      </div>
+    </div>
+  )
+}
+
 // ─── Tab : Matrice O-D ───────────────────────────────────────────────────────
 
 function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
@@ -525,6 +635,7 @@ function AdminSimulator() {
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null)
   const [showDeadZones,  setShowDeadZones]  = useState(true)
   const [odMatrix,       setOdMatrix]       = useState<ODMatrix | null>(null)
+  const [equityResult,   setEquityResult]   = useState<EquityResult | null>(null)
   const counterRef      = useRef(100)
   const citizenRoutesRef = useRef<Array<{ points: [number, number][] }>>([])
 
@@ -532,6 +643,12 @@ function AdminSimulator() {
   useEffect(() => {
     const result = computeCoverage(stops)
     setCoverageResult(result)
+  }, [stops])
+
+  // ── Moteur d'équité — recalcul à chaque changement d'arrêts ──────────────
+  useEffect(() => {
+    const result = computeEquity(stops, EQ_ZONES)
+    setEquityResult(result)
   }, [stops])
 
   // ── Chargement des tracés citoyens (une seule fois au montage) ────────────
@@ -615,7 +732,8 @@ function AdminSimulator() {
     { id: 'simulation',  label: 'Simulation'  },
     { id: 'achalandage', label: 'Achalandage' },
     { id: 'scenarios',   label: 'Scénarios'   },
-    { id: 'od',          label: 'Matrice O-D' },
+    { id: 'od',          label: 'O-D'         },
+    { id: 'equite',      label: 'Équité'      },
   ]
 
   return (
@@ -855,6 +973,11 @@ function AdminSimulator() {
         {/* ── Onglet Matrice O-D ── */}
         {activeTab === 'od' && (
           <TabOD odMatrix={odMatrix} />
+        )}
+
+        {/* ── Onglet Équité ── */}
+        {activeTab === 'equite' && (
+          <TabEquite equityResult={equityResult} />
         )}
 
       </aside>

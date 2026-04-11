@@ -14,6 +14,9 @@ import 'leaflet/dist/leaflet.css'
 import { aggregate, AggregationResult } from '@/lib/aggregation'
 import { getRoutes, getStops, ensureSeedData } from '@/lib/storage'
 import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
+import {
+  computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
+} from '@/lib/equity'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -154,65 +157,8 @@ const MAX_STA   = Math.max(...STATIONS.map(s => s.count))
 
 const MONCTON_CENTER: [number, number] = [46.075, -64.760]
 
-// ─── Zones d'équité démographique ─────────────────────────────────────────────
-// need: high = faible revenu + fort % aînés + densité élevée → besoin de transit élevé
-// Les données seront enrichies par les formulaires citoyens (Page 4 adresses)
-
-type NeedLevel = 'high' | 'medium' | 'low'
-
-const EQUITY_ZONES: {
-  id: string; label: string
-  bounds: [[number,number],[number,number]]
-  need: NeedLevel; pop: number; income: number; seniors: number
-}[] = [
-  {
-    id: 'eq1', label: 'Centre-ville Moncton',
-    bounds: [[46.083, -64.792], [46.102, -64.766]],
-    need: 'high', pop: 12400, income: 38200, seniors: 22,
-  },
-  {
-    id: 'eq2', label: 'Quartier Université',
-    bounds: [[46.096, -64.775], [46.112, -64.750]],
-    need: 'medium', pop: 8900, income: 45600, seniors: 8,
-  },
-  {
-    id: 'eq3', label: 'Dieppe Centre',
-    bounds: [[46.088, -64.758], [46.106, -64.726]],
-    need: 'medium', pop: 10200, income: 52300, seniors: 14,
-  },
-  {
-    id: 'eq4', label: 'Dieppe Est',
-    bounds: [[46.086, -64.730], [46.104, -64.700]],
-    need: 'low', pop: 6700, income: 68000, seniors: 11,
-  },
-  {
-    id: 'eq5', label: 'Riverview',
-    bounds: [[46.052, -64.812], [46.074, -64.782]],
-    need: 'low', pop: 9100, income: 71500, seniors: 19,
-  },
-  {
-    id: 'eq6', label: 'Moncton Ouest',
-    bounds: [[46.075, -64.840], [46.095, -64.812]],
-    need: 'medium', pop: 7300, income: 49200, seniors: 17,
-  },
-  {
-    id: 'eq7', label: 'Moncton Nord',
-    bounds: [[46.102, -64.800], [46.118, -64.765]],
-    need: 'high', pop: 9800, income: 36100, seniors: 26,
-  },
-]
-
-function equityColor(need: NeedLevel): string {
-  if (need === 'high')   return '#e74c3c'  // rouge  — besoin élevé
-  if (need === 'medium') return '#f39c12'  // orange — besoin moyen
-  return '#2ecc71'                          // vert   — besoin faible
-}
-
-function equityLabel(need: NeedLevel): string {
-  if (need === 'high')   return 'Besoin élevé'
-  if (need === 'medium') return 'Besoin moyen'
-  return 'Besoin faible'
-}
+// Zones d'équité : définies dans src/lib/equity/data.ts (EQ_ZONES)
+// Couleurs et labels : gapLevelColor / gapLevelLabel depuis src/lib/equity/index.ts
 
 // ─── Flux Origine-Destination ─────────────────────────────────────────────────
 // Données dérivées silencieusement de l'application citoyenne :
@@ -279,7 +225,8 @@ function AdminMapPage() {
   // ── Agrégation live ──────────────────────────────────────────────────────
   const [result,     setResult]     = useState<AggregationResult | null>(null)
   const [lastUpdate, setLastUpdate] = useState<number>(0)
-  const [odMatrix,   setOdMatrix]   = useState<ODMatrix | null>(null)
+  const [odMatrix,     setOdMatrix]     = useState<ODMatrix | null>(null)
+  const [equityResult, setEquityResult] = useState<EquityResult | null>(null)
 
   const runAggregation = useCallback(() => {
     ensureSeedData()  // injecte les données de démonstration si localStorage vide
@@ -293,6 +240,16 @@ function AdminMapPage() {
     const coveredPairs = computeCoveredPairs(agg.corridors, OD_ZONES)
     const odm          = buildODMatrix(routes, OD_ZONES, coveredPairs)
     setOdMatrix(odm)
+
+    // Équité : tous les arrêts agrégés traités comme actifs (état actuel des propositions)
+    const allAggStops = agg.stops.map(s => ({
+      id:     s.id,
+      type:   s.type as 'busstop' | 'station',
+      pos:    s.pos as [number, number],
+      active: true,
+    }))
+    const eq = computeEquity(allAggStops, EQ_ZONES)
+    setEquityResult(eq)
   }, [])
 
   useEffect(() => { runAggregation() }, [runAggregation])
@@ -400,20 +357,32 @@ function AdminMapPage() {
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#e74c3c' }} />
-              <span className="adm-heat-label">Besoin élevé</span>
+              <span className="adm-heat-label">Critique (écart ≥ 20)</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#f39c12' }} />
-              <span className="adm-heat-label">Besoin moyen</span>
+              <span className="adm-heat-label">Modéré (écart ≥ 10)</span>
+            </div>
+            <div className="adm-heat-row">
+              <span className="adm-heat-dot" style={{ background: '#f1c40f' }} />
+              <span className="adm-heat-label">Adéquat</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#2ecc71' }} />
-              <span className="adm-heat-label">Besoin faible</span>
+              <span className="adm-heat-label">Surplus de service</span>
             </div>
           </div>
+          {equityResult && (
+            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', margin: '4px 0 6px' }}>
+              Écart pondéré : {equityResult.weightedGap > 0 ? '+' : ''}{equityResult.weightedGap} pts
+              {equityResult.criticalZones.length > 0 && (
+                <span style={{ color: '#e74c3c' }}> · {equityResult.criticalZones.length} critique{equityResult.criticalZones.length > 1 ? 's' : ''}</span>
+              )}
+            </div>
+          )}
           <label className="adm-legend-item">
             <input type="checkbox" checked={showEquity} onChange={e => setShowEquity(e.target.checked)} />
-            <span className="adm-legend-name">Zones d'équité ({EQUITY_ZONES.length})</span>
+            <span className="adm-legend-name">Zones d'équité ({EQ_ZONES.length})</span>
           </label>
 
           <div className="adm-legend-sep" />
@@ -567,37 +536,57 @@ function AdminMapPage() {
             </CircleMarker>
           ))}
 
-          {/* Zones d'équité démographique */}
-          {showEquity && EQUITY_ZONES.map(z => (
-            <Rectangle
-              key={z.id}
-              bounds={z.bounds}
-              pathOptions={{
-                color:       equityColor(z.need),
-                fillColor:   equityColor(z.need),
-                fillOpacity: 0.18,
-                weight:      2,
-                dashArray:   '6 4',
-              }}
-            >
-              <Popup>
-                <div style={{ minWidth: 200 }}>
-                  <strong>{z.label}</strong><br />
-                  <span style={{ color: equityColor(z.need), fontWeight: 700, fontSize: '0.8rem' }}>
-                    {equityLabel(z.need)}
-                  </span>
-                  <hr style={{ margin: '6px 0', borderColor: '#eee' }} />
-                  <table style={{ fontSize: '0.8rem', width: '100%' }}>
-                    <tbody>
-                      <tr><td style={{ color: '#666' }}>Population</td><td><strong>{z.pop.toLocaleString()}</strong></td></tr>
-                      <tr><td style={{ color: '#666' }}>Revenu médian</td><td><strong>{z.income.toLocaleString()} $</strong></td></tr>
-                      <tr><td style={{ color: '#666' }}>% aînés (65+)</td><td><strong>{z.seniors} %</strong></td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </Popup>
-            </Rectangle>
-          ))}
+          {/* Zones d'équité — couleurs et scores calculés dynamiquement */}
+          {showEquity && EQ_ZONES.map(z => {
+            // Trouver le score calculé pour cette zone (fallback neutre si calcul en cours)
+            const score = equityResult?.scores.find(s => s.zone.id === z.id)
+            const color = score ? gapLevelColor(score.gapLevel) : '#888'
+            const label = score ? gapLevelLabel(score.gapLevel) : '—'
+            return (
+              <Rectangle
+                key={z.id}
+                bounds={z.bounds}
+                pathOptions={{
+                  color, fillColor: color,
+                  fillOpacity: 0.18, weight: 2, dashArray: '6 4',
+                }}
+              >
+                <Popup>
+                  <div style={{ minWidth: 220 }}>
+                    <strong>{z.name}</strong><br />
+                    <span style={{ color, fontWeight: 700, fontSize: '0.8rem' }}>{label}</span>
+                    {score && (
+                      <>
+                        <hr style={{ margin: '6px 0', borderColor: '#eee' }} />
+                        <table style={{ fontSize: '0.8rem', width: '100%' }}>
+                          <tbody>
+                            <tr>
+                              <td style={{ color: '#666' }}>Score besoin</td>
+                              <td><strong style={{ color: '#c0392b' }}>{score.needScore} / 100</strong></td>
+                            </tr>
+                            <tr>
+                              <td style={{ color: '#666' }}>Score service</td>
+                              <td><strong style={{ color }}>{score.serviceScore} / 100</strong></td>
+                            </tr>
+                            <tr>
+                              <td style={{ color: '#666' }}>Écart</td>
+                              <td><strong style={{ color }}>
+                                {score.gap > 0 ? '+' : ''}{score.gap} pts
+                              </strong></td>
+                            </tr>
+                            <tr><td colSpan={2}><hr style={{ margin: '4px 0', borderColor: '#eee' }} /></td></tr>
+                            <tr><td style={{ color: '#666' }}>Population</td><td><strong>{z.pop.toLocaleString()}</strong></td></tr>
+                            <tr><td style={{ color: '#666' }}>Revenu médian</td><td><strong>{z.income.toLocaleString()} $</strong></td></tr>
+                            <tr><td style={{ color: '#666' }}>% aînés (65+)</td><td><strong>{z.seniors} %</strong></td></tr>
+                          </tbody>
+                        </table>
+                      </>
+                    )}
+                  </div>
+                </Popup>
+              </Rectangle>
+            )
+          })}
 
           {/* Lignes de désir O-D — données calculées depuis les tracés citoyens */}
           {showOD && (() => {

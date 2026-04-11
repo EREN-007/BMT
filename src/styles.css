@@ -2651,6 +2651,136 @@ body {
   font-weight: 600;
 }
 
+/* ── Équité — onglet Simulateur ─────────────────────────────────────────── */
+
+.eq-kpi-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.eq-kpi-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.eq-kpi {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  padding: 8px 4px 6px;
+}
+
+.eq-kpi-value {
+  font-size: 1.30rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+
+.eq-kpi-label {
+  font-size: 0.58rem;
+  color: rgba(255,255,255,0.38);
+  margin-top: 4px;
+  text-align: center;
+}
+
+/* Liste de zones */
+
+.eq-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.eq-zone-item {
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.eq-item-critical { border-color: rgba(231,76,60,0.30);  background: rgba(231,76,60,0.05);  }
+.eq-item-moderate { border-color: rgba(243,156,18,0.25);  background: rgba(243,156,18,0.04); }
+.eq-item-adequate { border-color: rgba(241,196,15,0.20);  background: rgba(241,196,15,0.03); }
+.eq-item-surplus  { border-color: rgba(46,204,113,0.20);  background: rgba(46,204,113,0.03); }
+
+.eq-zone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 7px;
+}
+
+.eq-zone-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.8);
+  flex: 1;
+  margin-right: 8px;
+}
+
+.eq-zone-badge {
+  font-size: 0.60rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Barres Besoin / Service */
+
+.eq-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.eq-bar-label {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.38);
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.eq-bar-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.07);
+  overflow: hidden;
+}
+
+.eq-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.eq-bar-val {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.eq-gap-line {
+  font-size: 0.66rem;
+  font-weight: 700;
+  margin-top: 5px;
+}
+
 /* ── Matrice O-D — onglet Simulateur ────────────────────────────────────── */
 
 .od-summary-card {
