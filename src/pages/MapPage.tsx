@@ -133,6 +133,7 @@ function MapPage() {
   const [routes,      setRoutes]      = useState<Route[]>([])
   const [stops,       setStops]       = useState<Stop[]>([])
   const [pendingStop, setPendingStop] = useState<{ pos: [number, number]; type: 'busstop' | 'station' } | null>(null)
+  const [menuOpen,    setMenuOpen]    = useState(false)
 
   const currentIdRef = useRef<string>('')
 
@@ -301,123 +302,128 @@ function MapPage() {
       </Map>
 
       {/* ── Hint de dessin ── */}
-      {activeTool === 'pencil' && !isDrawing && (
+      {activeTool === 'pencil' && !isDrawing && menuOpen && (
         <div className="mp-hint">Appuyez sur la carte pour commencer une ligne</div>
       )}
       {activeTool === 'pencil' && isDrawing && (
-        <div className="mp-hint mp-hint-drawing">
-          Appuyez pour ajouter des points
-        </div>
+        <div className="mp-hint mp-hint-drawing">Appuyez pour ajouter des points</div>
       )}
 
       {/* ── Toolbar flottant ── */}
       <div className="mp-float-toolbar">
 
-        {/* Rangée outils */}
-        <div className="mp-ft-row mp-ft-tools">
+        {/* Panneau outils — déployable ── */}
+        <div className={`mp-ft-menu ${menuOpen ? 'mp-ft-menu-open' : ''}`}>
 
-          {/* Crayon */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'pencil' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('pencil')}
-            title="Tracer une ligne"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-            </svg>
-          </button>
+          {/* Ligne 1 : crayon + palette + terminer */}
+          <div className="mp-ft-menu-row">
+            <button
+              className={`mp-ft-btn ${activeTool === 'pencil' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('pencil')}
+              title="Tracer une ligne"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+              </svg>
+            </button>
 
-          {/* Palette — visible quand crayon actif */}
-          {activeTool === 'pencil' && (
             <div className="mp-ft-palette">
               {ROUTE_COLORS.map(c => (
                 <button
                   key={c.value}
                   className={`mp-ft-dot ${activeColor === c.value ? 'mp-ft-dot-on' : ''}`}
                   style={{ background: c.value }}
-                  onClick={() => setActiveColor(c.value)}
+                  onClick={() => { setActiveColor(c.value); setActiveTool('pencil') }}
                   title={c.label}
                 />
               ))}
             </div>
-          )}
 
-          {/* Terminer — visible pendant tracé */}
-          {isDrawing && (
-            <button className="mp-ft-btn mp-ft-finish" onClick={finishRoute} title="Terminer la ligne">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            </button>
-          )}
-
-          <div className="mp-ft-sep" />
-
-          {/* Gomme */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'eraser' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('eraser')}
-            title="Effacer le dernier élément"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/>
-              <path d="M6 17.5l3-3"/>
-            </svg>
-          </button>
-
-          {/* Arrêt */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'busstop' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('busstop')}
-            title="Placer un arrêt de bus"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <rect x="3" y="3" width="18" height="12" rx="2"/>
-              <path d="M7 15v2M17 15v2M3 9h18"/>
-              <circle cx="7.5"  cy="19" r="2"/>
-              <circle cx="16.5" cy="19" r="2"/>
-            </svg>
-          </button>
-
-          {/* Station */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'station' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('station')}
-            title="Placer une station"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M3 21h18M5 21V7l7-4 7 4v14"/>
-              <path d="M9 21v-4a2 2 0 0 1 4 0v4"/>
-            </svg>
-          </button>
-
-          <div className="mp-ft-sep" />
-
-          {/* Résultats */}
-          <button
-            className="mp-ft-btn mp-ft-results"
-            onClick={() => navigate('/results')}
-            title="Voir la carte citoyenne"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Rangée stats + Suivant */}
-        <div className="mp-ft-row mp-ft-actions">
-          <div className="mp-ft-stats">
-            <span>
-              <strong>{finishedCount}</strong> ligne{finishedCount !== 1 ? 's' : ''}
-            </span>
-            {stopCount > 0 && (
-              <span><strong>{stopCount}</strong> arrêt{stopCount !== 1 ? 's' : ''}</span>
-            )}
-            {stationCount > 0 && (
-              <span><strong>{stationCount}</strong> gare{stationCount !== 1 ? 's' : ''}</span>
+            {isDrawing && (
+              <button className="mp-ft-btn mp-ft-finish" onClick={finishRoute} title="Terminer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
             )}
           </div>
+
+          {/* Ligne 2 : gomme, arrêt, station, résultats */}
+          <div className="mp-ft-menu-row">
+            <button
+              className={`mp-ft-btn ${activeTool === 'eraser' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('eraser')}
+              title="Effacer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/>
+                <path d="M6 17.5l3-3"/>
+              </svg>
+            </button>
+
+            <button
+              className={`mp-ft-btn ${activeTool === 'busstop' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('busstop')}
+              title="Arrêt de bus"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <rect x="3" y="3" width="18" height="12" rx="2"/>
+                <path d="M7 15v2M17 15v2M3 9h18"/>
+                <circle cx="7.5"  cy="19" r="2"/>
+                <circle cx="16.5" cy="19" r="2"/>
+              </svg>
+            </button>
+
+            <button
+              className={`mp-ft-btn ${activeTool === 'station' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('station')}
+              title="Station"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M3 21h18M5 21V7l7-4 7 4v14"/>
+                <path d="M9 21v-4a2 2 0 0 1 4 0v4"/>
+              </svg>
+            </button>
+
+            <div className="mp-ft-sep" />
+
+            <button
+              className="mp-ft-btn mp-ft-results"
+              onClick={() => navigate('/results')}
+              title="Carte citoyenne"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Barre principale — toujours visible ── */}
+        <div className="mp-ft-row mp-ft-actions">
+
+          {/* Bouton hamburger */}
+          <button
+            className={`mp-ft-burger ${menuOpen ? 'mp-ft-burger-open' : ''}`}
+            onClick={() => setMenuOpen(o => !o)}
+            title="Outils"
+          >
+            <span /><span /><span />
+          </button>
+
+          {/* Outil actif — badge contextuel */}
+          <div className="mp-ft-active-badge">
+            {activeTool === 'pencil'  && <span style={{ color: activeColor }}>● Tracer</span>}
+            {activeTool === 'eraser'  && <span>✕ Gomme</span>}
+            {activeTool === 'busstop' && <span>🚏 Arrêt</span>}
+            {activeTool === 'station' && <span>🏢 Station</span>}
+          </div>
+
+          <div className="mp-ft-stats">
+            {finishedCount > 0 && <span><strong>{finishedCount}</strong> ligne{finishedCount !== 1 ? 's' : ''}</span>}
+            {stopCount     > 0 && <span><strong>{stopCount}</strong> arrêt{stopCount !== 1 ? 's' : ''}</span>}
+          </div>
+
           <button className="mp-ft-next" onClick={handleNext}>
             Suivant
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
