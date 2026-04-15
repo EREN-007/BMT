@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Map, { Source, Layer, Marker } from 'react-map-gl/mapbox'
 import type { MapRef, MapMouseEvent } from 'react-map-gl/mapbox'
@@ -27,10 +27,11 @@ const ROUTE_COLORS = [
 type RouteColor = typeof ROUTE_COLORS[number]['value']
 
 interface Route {
-  id:       string
-  points:   [number, number][]  // [lat, lng] — convention storage
-  color:    RouteColor
-  finished: boolean
+  id:            string
+  points:        [number, number][]   // waypoints cliqués [lat, lng]
+  snappedPoints?: [number, number][] // géométrie snappée aux routes réelles
+  color:         RouteColor
+  finished:      boolean
 }
 
 interface Stop {
@@ -40,13 +41,53 @@ interface Stop {
   label:    string
 }
 
-// ─── GeoJSON helper ───────────────────────────────────────────────────────────
+// ─── GeoJSON helper — utilise les points snappés si disponibles ───────────────
 
 function routeGeoJSON(route: Route): GeoJSON.Feature<GeoJSON.LineString> {
+  const pts = route.snappedPoints ?? route.points
   return {
     type: 'Feature',
-    geometry: { type: 'LineString', coordinates: route.points.map(toLngLat) },
+    geometry: { type: 'LineString', coordinates: pts.map(toLngLat) },
     properties: {},
+  }
+}
+
+// ─── Map Matching API — snap waypoints aux routes réelles ─────────────────────
+// Mapbox Map Matching API : prend des waypoints et retourne la géométrie exacte
+// de la route (toutes les courbes, carrefours, etc.)
+
+async function snapToRoads(
+  waypoints: [number, number][],  // [lat, lng]
+): Promise<[number, number][] | null> {
+  if (waypoints.length < 2) return null
+
+  // Downsample si > 100 points (limite API Mapbox)
+  const pts = waypoints.length > 100
+    ? waypoints.filter((_, i) =>
+        i % Math.ceil(waypoints.length / 98) === 0 ||
+        i === waypoints.length - 1
+      )
+    : waypoints
+
+  const coords   = pts.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';')
+  const radiuses = pts.map(() => '25').join(';') // rayon de snap 25 m
+
+  const url =
+    `https://api.mapbox.com/matching/v5/mapbox/driving/${coords}` +
+    `?radiuses=${radiuses}&geometries=geojson&tidy=true` +
+    `&access_token=${MAPBOX_TOKEN}`
+
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (data.code !== 'Ok' || !data.matchings?.[0]?.geometry?.coordinates) return null
+    // Convertit [lng, lat] → [lat, lng]
+    return (data.matchings[0].geometry.coordinates as number[][]).map(
+      ([lng, lat]) => [lat, lng] as [number, number]
+    )
+  } catch {
+    return null
   }
 }
 
@@ -178,7 +219,34 @@ function MapPage() {
   const [pendingStop, setPendingStop] = useState<{ pos: [number, number]; type: 'busstop' | 'station' } | null>(null)
   const [menuOpen,    setMenuOpen]    = useState(false)
 
-  const currentIdRef = useRef<string>('')
+  const currentIdRef        = useRef<string>('')
+  const snapTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSnappedCountRef = useRef<Record<string, number>>({})
+
+  // ── Map Matching — snap la route active aux rues réelles ──────────────────
+  // Déclenché à chaque nouveau point, avec 500ms de debounce pour ne pas
+  // surcharger l'API pendant un tracé rapide.
+  useEffect(() => {
+    const active = routes.find(r => !r.finished && r.id === currentIdRef.current)
+    if (!active || active.points.length < 2) return
+
+    // Évite de re-snapper si on n'a pas ajouté de nouveau point
+    const lastCount = lastSnappedCountRef.current[active.id] ?? 0
+    if (active.points.length === lastCount) return
+
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+
+    snapTimerRef.current = setTimeout(async () => {
+      const snapped = await snapToRoads(active.points)
+      if (!snapped) return
+      lastSnappedCountRef.current[active.id] = active.points.length
+      setRoutes(prev =>
+        prev.map(r => r.id === active.id ? { ...r, snappedPoints: snapped } : r)
+      )
+    }, 500)
+
+    return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current) }
+  }, [routes])
 
   // ── Clic sur la carte ──────────────────────────────────────────────────────
   const handleMapClick = useCallback((e: MapMouseEvent) => {
@@ -254,7 +322,10 @@ function MapPage() {
     const finishedRoutes = routes.filter(r => r.finished && r.points.length >= 2)
 
     if (finishedRoutes.length > 0)
-      saveRoutes(finishedRoutes.map(r => ({ points: r.points, color: r.color })), sessionId)
+      saveRoutes(
+        finishedRoutes.map(r => ({ points: r.snappedPoints ?? r.points, color: r.color })),
+        sessionId,
+      )
 
     if (stops.length > 0)
       saveStops(stops.map(s => ({ pos: s.position, type: s.type, label: s.label })), sessionId)
