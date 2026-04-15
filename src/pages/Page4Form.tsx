@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fireSubmissionConfirmation } from '@/lib/participation'
+import { clearMapDraft } from '@/pages/MapPage'
 
 interface FormData {
   nom: string
@@ -38,6 +39,7 @@ function Page4Form() {
     e.preventDefault()
     if (!validate()) return
     setSent(true)
+    clearMapDraft()   // effacer le brouillon après soumission réussie
     // Notification de confirmation si permission accordée
     fireSubmissionConfirmation('fr')
   }
