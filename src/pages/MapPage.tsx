@@ -56,8 +56,13 @@ function loadDraft(): DraftData | null {
 }
 
 function saveDraft(routes: Route[], stops: Stop[]) {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ routes, stops })) }
-  catch { /* quota */ }
+  try {
+    if (routes.length === 0 && stops.length === 0) {
+      localStorage.removeItem(DRAFT_KEY)
+    } else {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ routes, stops }))
+    }
+  } catch { /* quota */ }
 }
 
 export function clearMapDraft() { localStorage.removeItem(DRAFT_KEY) }
@@ -448,6 +453,8 @@ function MapPage() {
   // ── Réinitialiser le dessin ───────────────────────────────────────────────
   const handleReset = useCallback(() => {
     if (!window.confirm('Effacer tous les tracés et recommencer à zéro ?')) return
+    // Annuler tout snap en attente avant de vider l'état
+    if (snapTimerRef.current) { clearTimeout(snapTimerRef.current); snapTimerRef.current = null }
     clearMapDraft()
     setRoutes([])
     setStops([])
@@ -459,8 +466,22 @@ function MapPage() {
 
   // ── Sauvegarder et naviguer ────────────────────────────────────────────────
   const handleNext = useCallback(() => {
-    const sessionId     = `session-${Date.now()}`
-    const finishedRoutes = routes.filter(r => r.finished && r.points.length >= 2)
+    const sessionId = `session-${Date.now()}`
+
+    // Auto-terminer si l'utilisateur clique "Suivant" en cours de tracé
+    const allRoutes = isDrawing
+      ? routes.map(r =>
+          r.id === currentIdRef.current ? { ...r, finished: true } : r
+        )
+      : routes
+
+    if (isDrawing) {
+      setIsDrawing(false)
+      // Mettre à jour le draft avec la route auto-terminée
+      setRoutes(allRoutes)
+    }
+
+    const finishedRoutes = allRoutes.filter(r => r.finished && r.points.length >= 2)
 
     if (finishedRoutes.length > 0)
       saveRoutes(
@@ -472,7 +493,7 @@ function MapPage() {
       saveStops(stops.map(s => ({ pos: s.position, type: s.type, label: s.label })), sessionId)
 
     navigate('/page4')
-  }, [routes, stops, navigate])
+  }, [routes, stops, navigate, isDrawing])
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const finishedCount = routes.filter(r => r.finished).length
@@ -726,6 +747,7 @@ function MapPage() {
           <div className="mp-ft-stats">
             {finishedCount > 0 && <span><strong>{finishedCount}</strong> ligne{finishedCount !== 1 ? 's' : ''}</span>}
             {stopCount     > 0 && <span><strong>{stopCount}</strong> arrêt{stopCount !== 1 ? 's' : ''}</span>}
+            {stationCount  > 0 && <span><strong>{stationCount}</strong> station{stationCount !== 1 ? 's' : ''}</span>}
           </div>
 
           <button className="mp-ft-next" onClick={handleNext}>
