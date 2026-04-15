@@ -41,6 +41,27 @@ interface Stop {
   label:    string
 }
 
+// ─── Brouillon — persistance localStorage ────────────────────────────────────
+// Sauvegarde automatique des tracés. Effacé seulement après soumission du form.
+
+const DRAFT_KEY = 'bmt_map_draft'
+
+interface DraftData { routes: Route[]; stops: Stop[] }
+
+function loadDraft(): DraftData | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as DraftData) : null
+  } catch { return null }
+}
+
+function saveDraft(routes: Route[], stops: Stop[]) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ routes, stops })) }
+  catch { /* quota */ }
+}
+
+export function clearMapDraft() { localStorage.removeItem(DRAFT_KEY) }
+
 // ─── GeoJSON helper — utilise les points snappés si disponibles ───────────────
 
 function routeGeoJSON(route: Route): GeoJSON.Feature<GeoJSON.LineString> {
@@ -302,14 +323,34 @@ function MapPage() {
   const [activeTool,  setActiveTool]  = useState<Tool>('pencil')
   const [activeColor, setActiveColor] = useState<RouteColor>('#3498db')
   const [isDrawing,   setIsDrawing]   = useState(false)
-  const [routes,      setRoutes]      = useState<Route[]>([])
-  const [stops,       setStops]       = useState<Stop[]>([])
   const [pendingStop, setPendingStop] = useState<{ pos: [number, number]; type: 'busstop' | 'station' } | null>(null)
   const [menuOpen,    setMenuOpen]    = useState(false)
+
+  // ── Brouillon — restauration au montage ──────────────────────────────────
+  const [routes, setRoutes] = useState<Route[]>(() => {
+    const d = loadDraft()
+    // Toutes les lignes restaurées en état "terminé" (nouvelle session)
+    return (d?.routes ?? []).map(r => ({ ...r, finished: true }))
+  })
+  const [stops, setStops] = useState<Stop[]>(() => loadDraft()?.stops ?? [])
+  const [showDraftBadge, setShowDraftBadge] = useState<boolean>(() => {
+    const d = loadDraft()
+    return (d?.routes?.length ?? 0) > 0 || (d?.stops?.length ?? 0) > 0
+  })
 
   const currentIdRef        = useRef<string>('')
   const snapTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSnappedCountRef = useRef<Record<string, number>>({})
+
+  // ── Auto-save brouillon à chaque modification ─────────────────────────────
+  useEffect(() => { saveDraft(routes, stops) }, [routes, stops])
+
+  // ── Masquer le badge "brouillon restauré" après 3,5 s ─────────────────────
+  useEffect(() => {
+    if (!showDraftBadge) return
+    const t = setTimeout(() => setShowDraftBadge(false), 3500)
+    return () => clearTimeout(t)
+  }, [showDraftBadge])
 
   // ── Map Matching — snap la route active aux rues réelles ──────────────────
   // Déclenché à chaque nouveau point, avec 500ms de debounce pour ne pas
@@ -403,6 +444,18 @@ function MapPage() {
     }])
     setPendingStop(null)
   }, [pendingStop])
+
+  // ── Réinitialiser le dessin ───────────────────────────────────────────────
+  const handleReset = useCallback(() => {
+    if (!window.confirm('Effacer tous les tracés et recommencer à zéro ?')) return
+    clearMapDraft()
+    setRoutes([])
+    setStops([])
+    setIsDrawing(false)
+    setShowDraftBadge(false)
+    currentIdRef.current = ''
+    lastSnappedCountRef.current = {}
+  }, [])
 
   // ── Sauvegarder et naviguer ────────────────────────────────────────────────
   const handleNext = useCallback(() => {
@@ -530,6 +583,17 @@ function MapPage() {
         ))}
       </Map>
 
+      {/* ── Badge brouillon restauré ── */}
+      {showDraftBadge && (
+        <div className="mp-draft-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          Brouillon restauré — {routes.length} ligne{routes.length !== 1 ? 's' : ''}
+          {stops.length > 0 && `, ${stops.length} arrêt${stops.length !== 1 ? 's' : ''}`}
+        </div>
+      )}
+
       {/* ── Hint de dessin ── */}
       {activeTool === 'pencil' && !isDrawing && menuOpen && (
         <div className="mp-hint">Appuyez sur la carte pour commencer une ligne</div>
@@ -615,6 +679,17 @@ function MapPage() {
             </button>
 
             <div className="mp-ft-sep" />
+
+            <button
+              className="mp-ft-btn mp-ft-reset"
+              onClick={handleReset}
+              title="Réinitialiser le dessin"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+              </svg>
+            </button>
 
             <button
               className="mp-ft-btn mp-ft-results"

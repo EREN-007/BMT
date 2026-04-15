@@ -39,6 +39,46 @@
   color: #b8f5d0;
 }
 
+/* ── Badge "brouillon restauré" ── */
+.mp-draft-badge {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 201;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(10, 22, 40, 0.92);
+  border: 1px solid rgba(46, 204, 113, 0.45);
+  color: #b8f5d0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: mp-draft-in 0.3s ease both, mp-draft-out 0.4s ease 3.1s both;
+}
+.mp-draft-badge svg {
+  width: 14px; height: 14px;
+  flex-shrink: 0;
+  stroke: #2ecc71;
+}
+@keyframes mp-draft-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes mp-draft-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ── Bouton reset dans le menu ── */
+.mp-ft-reset { color: rgba(255, 100, 80, 0.75); }
+.mp-ft-reset:hover { color: #ff6450; background: rgba(255, 100, 80, 0.12); }
+
 /* ── Floating toolbar ── */
 .mp-float-toolbar {
   position: absolute;
