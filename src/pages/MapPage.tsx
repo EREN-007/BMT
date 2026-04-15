@@ -53,66 +53,109 @@ function routeGeoJSON(route: Route): GeoJSON.Feature<GeoJSON.LineString> {
 // ─── Stop Name Modal ──────────────────────────────────────────────────────────
 // Utilise Mapbox Static Images pour la vue satellite (pas de Leaflet)
 
-interface StopModalProps {
-  position: [number, number]
-  type:     'busstop' | 'station'
-  onConfirm: (label: string) => void
+interface ImmersiveStopModalProps {
+  position:  [number, number]   // [lat, lng] tap initial
+  type:      'busstop' | 'station'
+  onConfirm: (label: string, refinedPos: [number, number]) => void
   onCancel:  () => void
 }
 
-function StopModal({ position, type, onConfirm, onCancel }: StopModalProps) {
-  const [label, setLabel] = useState('')
-  const [lat, lng] = position
-  const imgUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${lng},${lat},18,0/380x180@2x?access_token=${MAPBOX_TOKEN}`
+function ImmersiveStopModal({ position, type, onConfirm, onCancel }: ImmersiveStopModalProps) {
+  const [label,     setLabel]     = useState('')
+  const [mapCenter, setMapCenter] = useState<[number, number]>(position) // [lat, lng]
 
-  const typeFr = type === 'busstop' ? 'arrêt de bus' : 'station / gare'
+  const typeFr      = type === 'busstop' ? 'Arrêt de bus' : 'Station / Gare'
+  const typeEn      = type === 'busstop' ? 'Bus stop'     : 'Station'
   const placeholder = type === 'busstop' ? 'ex: Arrêt Main St.' : 'ex: Gare Moncton'
 
+  const handleConfirm = () => onConfirm(label.trim() || typeFr, mapCenter)
+
   return (
-    <div className="mp-modal-overlay" role="dialog" aria-modal="true">
-      <div className="mp-modal">
-        <div className="mp-modal-header">
-          <span className="mp-modal-icon">{type === 'busstop' ? '🚏' : '🏢'}</span>
-          <div>
-            <h2 className="mp-modal-title">
-              {type === 'busstop' ? 'Placer un arrêt de bus' : 'Placer une station / gare'}
-            </h2>
-            <p className="mp-modal-coords">{lat.toFixed(5)}, {lng.toFixed(5)}</p>
-          </div>
-        </div>
+    <div className="mp-imm-root">
 
-        {/* Vue satellite via Mapbox Static Images */}
-        <div className="mp-modal-map-wrap">
-          <img
-            src={imgUrl}
-            alt="Vue satellite"
-            className="mp-modal-sat-img"
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-          />
-          <div className="mp-modal-map-label">Vue satellite — {typeFr}</div>
-        </div>
+      {/* ── Carte 3D interactive ── */}
+      <Map
+        mapboxAccessToken={MAPBOX_TOKEN}
+        mapStyle={MAPBOX_STYLE}
+        initialViewState={{
+          longitude: position[1],
+          latitude:  position[0],
+          zoom:      18,
+          pitch:     60,
+          bearing:   -17,
+        }}
+        style={{ width: '100%', height: '100%' }}
+        onMove={e => setMapCenter([e.viewState.latitude, e.viewState.longitude])}
+        attributionControl={false}
+        logoPosition="bottom-right"
+      />
 
-        <div className="mp-modal-form">
-          <label className="mp-modal-field-label">Nom {typeFr}</label>
-          <input
-            className="mp-modal-input"
-            type="text"
-            placeholder={placeholder}
-            value={label}
-            onChange={e => setLabel(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && onConfirm(label || typeFr)}
-            autoFocus
-          />
+      {/* ── Pin fixe au centre de l'écran ── */}
+      <div className="mp-imm-pin-wrap" aria-hidden>
+        <div className={`mp-imm-pin mp-imm-pin-${type}`}>
+          {type === 'busstop' ? (
+            <svg viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="14" fill="#1255a0" stroke="white" strokeWidth="2.5"/>
+              <rect x="9"  y="9"  width="14" height="9"  rx="2" fill="white" opacity=".9"/>
+              <rect x="9"  y="12" width="14" height="2.5" fill="#FFD700"/>
+              <circle cx="12" cy="23" r="2.5" fill="white"/>
+              <circle cx="20" cy="23" r="2.5" fill="white"/>
+            </svg>
+          ) : (
+            <svg viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="14" fill="#e6b800" stroke="white" strokeWidth="2.5"/>
+              <path d="M16 7L9 12v12h14V12L16 7z" fill="white" opacity=".9"/>
+              <rect x="12.5" y="16" width="3"  height="8" fill="#e6b800"/>
+              <rect x="16.5" y="16" width="3"  height="8" fill="#e6b800"/>
+              <rect x="11"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
+              <rect x="17"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
+            </svg>
+          )}
         </div>
+        {/* Ombre projetée vers le bas */}
+        <div className="mp-imm-pin-shadow" />
+        {/* Pulse ring */}
+        <div className={`mp-imm-pulse mp-imm-pulse-${type}`} />
+      </div>
 
-        <div className="mp-modal-actions">
-          <button className="mp-modal-btn mp-modal-cancel"  onClick={onCancel}>
+      {/* ── Header ── */}
+      <div className="mp-imm-header">
+        <button className="mp-imm-back" onClick={onCancel} aria-label="Annuler">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div className="mp-imm-header-info">
+          <span className="mp-imm-type">{typeFr} / {typeEn}</span>
+          <span className="mp-imm-coords">
+            {mapCenter[0].toFixed(5)}, {mapCenter[1].toFixed(5)}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Panneau bas ── */}
+      <div className="mp-imm-panel">
+        <p className="mp-imm-hint">
+          {type === 'busstop'
+            ? 'Déplacez la carte pour positionner l\'arrêt avec précision'
+            : 'Déplacez la carte pour positionner la station avec précision'}
+        </p>
+        <input
+          className="mp-imm-input"
+          type="text"
+          placeholder={placeholder}
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+        />
+        <div className="mp-imm-actions">
+          <button className="mp-imm-btn-cancel" onClick={onCancel}>
             Annuler
           </button>
-          <button
-            className="mp-modal-btn mp-modal-confirm"
-            onClick={() => onConfirm(label || typeFr)}
-          >
+          <button className="mp-imm-btn-confirm" onClick={handleConfirm}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
             Confirmer
           </button>
         </div>
@@ -193,13 +236,13 @@ function MapPage() {
     if (tool === 'eraser') eraseLastItem()
   }, [activeTool, isDrawing, finishRoute, eraseLastItem])
 
-  // ── Confirmer arrêt ────────────────────────────────────────────────────────
-  const handleStopConfirm = useCallback((label: string) => {
+  // ── Confirmer arrêt (position affinée depuis la carte 3D) ─────────────────
+  const handleStopConfirm = useCallback((label: string, refinedPos: [number, number]) => {
     if (!pendingStop) return
     setStops(prev => [...prev, {
       id:       `stop-${Date.now()}`,
       type:     pendingStop.type,
-      position: pendingStop.pos,
+      position: refinedPos,
       label,
     }])
     setPendingStop(null)
@@ -433,9 +476,9 @@ function MapPage() {
         </div>
       </div>
 
-      {/* ── Modal arrêt ── */}
+      {/* ── Modal immersif 3D ── */}
       {pendingStop && (
-        <StopModal
+        <ImmersiveStopModal
           position={pendingStop.pos}
           type={pendingStop.type}
           onConfirm={handleStopConfirm}
