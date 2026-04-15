@@ -274,11 +274,12 @@ function AdminFinalMap() {
       {/* ── Carte ── */}
       <div className="mp-map-wrap" style={{ position:'relative' }}>
         <MapContainer center={MONCTON_CENTER} zoom={13} className="mp-leaflet" zoomControl={false}>
-          {/* CartoDB Positron — fond professionnel épuré */}
+          {/* Mapbox custom style — cohérent avec l'interface utilisateur */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            maxZoom={20}
+            url="https://api.mapbox.com/styles/v1/erenjager/cmnxylxae002401s4c7v68c3x/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ"
+            attribution='&copy; <a href="https://mapbox.com">Mapbox</a>'
+            tileSize={512}
+            zoomOffset={-1}
           />
 
           {/* Limites municipales */}

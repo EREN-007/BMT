@@ -823,9 +823,10 @@ function AdminSimulator() {
           style={{ cursor: addingStop ? 'crosshair' : undefined }}
         >
           <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            maxZoom={20}
+            url="https://api.mapbox.com/styles/v1/erenjager/cmnxylxae002401s4c7v68c3x/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ"
+            attribution='&copy; <a href="https://mapbox.com">Mapbox</a>'
+            tileSize={512}
+            zoomOffset={-1}
           />
 
           {showRoutes && routes.filter(r => r.active).map(r => (
