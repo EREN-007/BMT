@@ -291,15 +291,42 @@ function MapPage() {
         {routes.map(route =>
           route.points.length >= 2 && (
             <Source key={route.id} id={`src-${route.id}`} type="geojson" data={routeGeoJSON(route)}>
+              {/* Casing blanc en dessous — donne un contour qui épouse la route */}
+              <Layer
+                id={`lyr-casing-${route.id}`}
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': '#ffffff',
+                  'line-width': [
+                    'interpolate', ['exponential', 1.6], ['zoom'],
+                    10, 3,
+                    13, 6,
+                    15, 10,
+                    17, 16,
+                    19, 26,
+                  ],
+                  'line-opacity': route.finished ? 0.25 : 0.12,
+                  'line-blur': 1,
+                }}
+              />
+              {/* Ligne colorée par-dessus */}
               <Layer
                 id={`lyr-${route.id}`}
                 type="line"
                 layout={{ 'line-cap': 'round', 'line-join': 'round' }}
                 paint={{
-                  'line-color':   route.color,
-                  'line-width':   5,
-                  'line-opacity': route.finished ? 0.9 : 0.6,
-                  ...(route.finished ? {} : { 'line-dasharray': [3, 3] }),
+                  'line-color': route.color,
+                  'line-width': [
+                    'interpolate', ['exponential', 1.6], ['zoom'],
+                    10, 2,
+                    13, 4,
+                    15, 7,
+                    17, 11,
+                    19, 18,
+                  ],
+                  'line-opacity': route.finished ? 0.88 : 0.55,
+                  ...(route.finished ? {} : { 'line-dasharray': [4, 3] }),
                 }}
               />
             </Source>
