@@ -91,25 +91,69 @@ async function snapToRoads(
   }
 }
 
+// ─── Géométrie — point le plus proche sur une polyligne ──────────────────────
+// Utilisé pour snapper automatiquement un arrêt sur la ligne tracée
+
+function ptOnSegment(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number],
+): { dist: number; pt: [number, number] } {
+  const dlat = b[0] - a[0], dlng = b[1] - a[1]
+  const len2 = dlat * dlat + dlng * dlng
+  if (len2 === 0) return { dist: Math.hypot(p[0] - a[0], p[1] - a[1]), pt: a }
+  const t = Math.max(0, Math.min(1,
+    ((p[0] - a[0]) * dlat + (p[1] - a[1]) * dlng) / len2,
+  ))
+  const pt: [number, number] = [a[0] + t * dlat, a[1] + t * dlng]
+  return { dist: Math.hypot(p[0] - pt[0], p[1] - pt[1]), pt }
+}
+
+function nearestOnRoutes(
+  pos: [number, number],
+  routes: Route[],
+): [number, number] | null {
+  let best = Infinity
+  let nearest: [number, number] | null = null
+  for (const r of routes) {
+    const pts = r.snappedPoints ?? r.points
+    for (let i = 0; i < pts.length - 1; i++) {
+      const { dist, pt } = ptOnSegment(pos, pts[i], pts[i + 1])
+      if (dist < best) { best = dist; nearest = pt }
+    }
+  }
+  return nearest
+}
+
 // ─── Stop Name Modal ──────────────────────────────────────────────────────────
-// Utilise Mapbox Static Images pour la vue satellite (pas de Leaflet)
 
 interface ImmersiveStopModalProps {
   position:  [number, number]   // [lat, lng] tap initial
   type:      'busstop' | 'station'
+  routes:    Route[]            // lignes tracées — repères + snap
   onConfirm: (label: string, refinedPos: [number, number]) => void
   onCancel:  () => void
 }
 
-function ImmersiveStopModal({ position, type, onConfirm, onCancel }: ImmersiveStopModalProps) {
+function ImmersiveStopModal({ position, type, routes, onConfirm, onCancel }: ImmersiveStopModalProps) {
   const [label,     setLabel]     = useState('')
   const [mapCenter, setMapCenter] = useState<[number, number]>(position) // [lat, lng]
+
+  // Lignes avec géométrie suffisante pour le snap
+  const activeRoutes = routes.filter(r => (r.snappedPoints ?? r.points).length >= 2)
+  const hasRoutes    = activeRoutes.length > 0
+
+  // Position finale = point le plus proche sur n'importe quelle ligne tracée
+  // Si aucune ligne → on utilise le centre carte (comportement original)
+  const snappedPos: [number, number] = hasRoutes
+    ? (nearestOnRoutes(mapCenter, activeRoutes) ?? mapCenter)
+    : mapCenter
 
   const typeFr      = type === 'busstop' ? 'Arrêt de bus' : 'Station / Gare'
   const typeEn      = type === 'busstop' ? 'Bus stop'     : 'Station'
   const placeholder = type === 'busstop' ? 'ex: Arrêt Main St.' : 'ex: Gare Moncton'
 
-  const handleConfirm = () => onConfirm(label.trim() || typeFr, mapCenter)
+  const handleConfirm = () => onConfirm(label.trim() || typeFr, snappedPos)
 
   return (
     <div className="mp-imm-root">
@@ -129,35 +173,75 @@ function ImmersiveStopModal({ position, type, onConfirm, onCancel }: ImmersiveSt
         onMove={e => setMapCenter([e.viewState.latitude, e.viewState.longitude])}
         attributionControl={false}
         logoPosition="bottom-right"
-      />
+      >
+        {/* ── Lignes tracées — repères visuels ── */}
+        {activeRoutes.map(route => {
+          const pts = route.snappedPoints ?? route.points
+          const data: GeoJSON.Feature<GeoJSON.LineString> = {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: pts.map(toLngLat) },
+            properties: {},
+          }
+          return (
+            <Source key={route.id} id={`imm-src-${route.id}`} type="geojson" data={data}>
+              {/* Casing blanc */}
+              <Layer
+                id={`imm-lyr-casing-${route.id}`}
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': '#ffffff',
+                  'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 15, 14, 18, 24],
+                  'line-opacity': 0.2,
+                  'line-blur': 2,
+                }}
+              />
+              {/* Ligne couleur */}
+              <Layer
+                id={`imm-lyr-${route.id}`}
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': route.color,
+                  'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 15, 7, 18, 14],
+                  'line-opacity': 0.92,
+                }}
+              />
+            </Source>
+          )
+        })}
 
-      {/* ── Pin fixe au centre de l'écran ── */}
-      <div className="mp-imm-pin-wrap" aria-hidden>
-        <div className={`mp-imm-pin mp-imm-pin-${type}`}>
-          {type === 'busstop' ? (
-            <svg viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="16" r="14" fill="#1255a0" stroke="white" strokeWidth="2.5"/>
-              <rect x="9"  y="9"  width="14" height="9"  rx="2" fill="white" opacity=".9"/>
-              <rect x="9"  y="12" width="14" height="2.5" fill="#FFD700"/>
-              <circle cx="12" cy="23" r="2.5" fill="white"/>
-              <circle cx="20" cy="23" r="2.5" fill="white"/>
-            </svg>
-          ) : (
-            <svg viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="16" r="14" fill="#e6b800" stroke="white" strokeWidth="2.5"/>
-              <path d="M16 7L9 12v12h14V12L16 7z" fill="white" opacity=".9"/>
-              <rect x="12.5" y="16" width="3"  height="8" fill="#e6b800"/>
-              <rect x="16.5" y="16" width="3"  height="8" fill="#e6b800"/>
-              <rect x="11"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
-              <rect x="17"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
-            </svg>
-          )}
-        </div>
-        {/* Ombre projetée vers le bas */}
-        <div className="mp-imm-pin-shadow" />
-        {/* Pulse ring */}
-        <div className={`mp-imm-pulse mp-imm-pulse-${type}`} />
-      </div>
+        {/* ── Pin snappé sur la ligne — Mapbox Marker (suit la géométrie) ── */}
+        <Marker longitude={snappedPos[1]} latitude={snappedPos[0]} anchor="bottom">
+          <div className="mp-imm-marker-wrap" aria-hidden>
+            <div className={`mp-imm-pin mp-imm-pin-${type}`}>
+              {type === 'busstop' ? (
+                <svg viewBox="0 0 32 32" fill="none">
+                  <circle cx="16" cy="16" r="14" fill="#1255a0" stroke="white" strokeWidth="2.5"/>
+                  <rect x="9"  y="9"  width="14" height="9"  rx="2" fill="white" opacity=".9"/>
+                  <rect x="9"  y="12" width="14" height="2.5" fill="#FFD700"/>
+                  <circle cx="12" cy="23" r="2.5" fill="white"/>
+                  <circle cx="20" cy="23" r="2.5" fill="white"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 32 32" fill="none">
+                  <circle cx="16" cy="16" r="14" fill="#e6b800" stroke="white" strokeWidth="2.5"/>
+                  <path d="M16 7L9 12v12h14V12L16 7z" fill="white" opacity=".9"/>
+                  <rect x="12.5" y="16" width="3"  height="8" fill="#e6b800"/>
+                  <rect x="16.5" y="16" width="3"  height="8" fill="#e6b800"/>
+                  <rect x="11"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
+                  <rect x="17"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
+                </svg>
+              )}
+            </div>
+            <div className="mp-imm-pin-shadow" />
+            <div className={`mp-imm-pulse mp-imm-pulse-${type}`} />
+          </div>
+        </Marker>
+      </Map>
+
+      {/* ── Réticule au centre (repère de navigation) ── */}
+      <div className="mp-imm-crosshair" aria-hidden />
 
       {/* ── Header ── */}
       <div className="mp-imm-header">
@@ -169,7 +253,7 @@ function ImmersiveStopModal({ position, type, onConfirm, onCancel }: ImmersiveSt
         <div className="mp-imm-header-info">
           <span className="mp-imm-type">{typeFr} / {typeEn}</span>
           <span className="mp-imm-coords">
-            {mapCenter[0].toFixed(5)}, {mapCenter[1].toFixed(5)}
+            {snappedPos[0].toFixed(5)}, {snappedPos[1].toFixed(5)}
           </span>
         </div>
       </div>
@@ -177,9 +261,13 @@ function ImmersiveStopModal({ position, type, onConfirm, onCancel }: ImmersiveSt
       {/* ── Panneau bas ── */}
       <div className="mp-imm-panel">
         <p className="mp-imm-hint">
-          {type === 'busstop'
-            ? 'Déplacez la carte pour positionner l\'arrêt avec précision'
-            : 'Déplacez la carte pour positionner la station avec précision'}
+          {hasRoutes
+            ? (type === 'busstop'
+                ? "L'arrêt se colle sur votre ligne — déplacez la carte pour choisir l'emplacement exact"
+                : "La station se colle sur votre ligne — déplacez la carte pour choisir l'emplacement exact")
+            : (type === 'busstop'
+                ? "Déplacez la carte pour positionner l'arrêt avec précision"
+                : "Déplacez la carte pour positionner la station avec précision")}
         </p>
         <input
           className="mp-imm-input"
@@ -579,6 +667,7 @@ function MapPage() {
         <ImmersiveStopModal
           position={pendingStop.pos}
           type={pendingStop.type}
+          routes={routes}
           onConfirm={handleStopConfirm}
           onCancel={() => setPendingStop(null)}
         />
