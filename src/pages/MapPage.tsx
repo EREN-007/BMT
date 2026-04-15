@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Map, { Source, Layer, Marker } from 'react-map-gl/mapbox'
 import type { MapRef, MapMouseEvent } from 'react-map-gl/mapbox'
@@ -27,10 +27,11 @@ const ROUTE_COLORS = [
 type RouteColor = typeof ROUTE_COLORS[number]['value']
 
 interface Route {
-  id:       string
-  points:   [number, number][]  // [lat, lng] — convention storage
-  color:    RouteColor
-  finished: boolean
+  id:            string
+  points:        [number, number][]   // waypoints cliqués [lat, lng]
+  snappedPoints?: [number, number][] // géométrie snappée aux routes réelles
+  color:         RouteColor
+  finished:      boolean
 }
 
 interface Stop {
@@ -40,79 +41,162 @@ interface Stop {
   label:    string
 }
 
-// ─── GeoJSON helper ───────────────────────────────────────────────────────────
+// ─── GeoJSON helper — utilise les points snappés si disponibles ───────────────
 
 function routeGeoJSON(route: Route): GeoJSON.Feature<GeoJSON.LineString> {
+  const pts = route.snappedPoints ?? route.points
   return {
     type: 'Feature',
-    geometry: { type: 'LineString', coordinates: route.points.map(toLngLat) },
+    geometry: { type: 'LineString', coordinates: pts.map(toLngLat) },
     properties: {},
+  }
+}
+
+// ─── Map Matching API — snap waypoints aux routes réelles ─────────────────────
+// Mapbox Map Matching API : prend des waypoints et retourne la géométrie exacte
+// de la route (toutes les courbes, carrefours, etc.)
+
+async function snapToRoads(
+  waypoints: [number, number][],  // [lat, lng]
+): Promise<[number, number][] | null> {
+  if (waypoints.length < 2) return null
+
+  // Downsample si > 100 points (limite API Mapbox)
+  const pts = waypoints.length > 100
+    ? waypoints.filter((_, i) =>
+        i % Math.ceil(waypoints.length / 98) === 0 ||
+        i === waypoints.length - 1
+      )
+    : waypoints
+
+  const coords   = pts.map(([lat, lng]) => `${lng.toFixed(6)},${lat.toFixed(6)}`).join(';')
+  const radiuses = pts.map(() => '25').join(';') // rayon de snap 25 m
+
+  const url =
+    `https://api.mapbox.com/matching/v5/mapbox/driving/${coords}` +
+    `?radiuses=${radiuses}&geometries=geojson&tidy=true` +
+    `&access_token=${MAPBOX_TOKEN}`
+
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (data.code !== 'Ok' || !data.matchings?.[0]?.geometry?.coordinates) return null
+    // Convertit [lng, lat] → [lat, lng]
+    return (data.matchings[0].geometry.coordinates as number[][]).map(
+      ([lng, lat]) => [lat, lng] as [number, number]
+    )
+  } catch {
+    return null
   }
 }
 
 // ─── Stop Name Modal ──────────────────────────────────────────────────────────
 // Utilise Mapbox Static Images pour la vue satellite (pas de Leaflet)
 
-interface StopModalProps {
-  position: [number, number]
-  type:     'busstop' | 'station'
-  onConfirm: (label: string) => void
+interface ImmersiveStopModalProps {
+  position:  [number, number]   // [lat, lng] tap initial
+  type:      'busstop' | 'station'
+  onConfirm: (label: string, refinedPos: [number, number]) => void
   onCancel:  () => void
 }
 
-function StopModal({ position, type, onConfirm, onCancel }: StopModalProps) {
-  const [label, setLabel] = useState('')
-  const [lat, lng] = position
-  const imgUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${lng},${lat},18,0/380x180@2x?access_token=${MAPBOX_TOKEN}`
+function ImmersiveStopModal({ position, type, onConfirm, onCancel }: ImmersiveStopModalProps) {
+  const [label,     setLabel]     = useState('')
+  const [mapCenter, setMapCenter] = useState<[number, number]>(position) // [lat, lng]
 
-  const typeFr = type === 'busstop' ? 'arrêt de bus' : 'station / gare'
+  const typeFr      = type === 'busstop' ? 'Arrêt de bus' : 'Station / Gare'
+  const typeEn      = type === 'busstop' ? 'Bus stop'     : 'Station'
   const placeholder = type === 'busstop' ? 'ex: Arrêt Main St.' : 'ex: Gare Moncton'
 
+  const handleConfirm = () => onConfirm(label.trim() || typeFr, mapCenter)
+
   return (
-    <div className="mp-modal-overlay" role="dialog" aria-modal="true">
-      <div className="mp-modal">
-        <div className="mp-modal-header">
-          <span className="mp-modal-icon">{type === 'busstop' ? '🚏' : '🏢'}</span>
-          <div>
-            <h2 className="mp-modal-title">
-              {type === 'busstop' ? 'Placer un arrêt de bus' : 'Placer une station / gare'}
-            </h2>
-            <p className="mp-modal-coords">{lat.toFixed(5)}, {lng.toFixed(5)}</p>
-          </div>
-        </div>
+    <div className="mp-imm-root">
 
-        {/* Vue satellite via Mapbox Static Images */}
-        <div className="mp-modal-map-wrap">
-          <img
-            src={imgUrl}
-            alt="Vue satellite"
-            className="mp-modal-sat-img"
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-          />
-          <div className="mp-modal-map-label">Vue satellite — {typeFr}</div>
-        </div>
+      {/* ── Carte 3D interactive ── */}
+      <Map
+        mapboxAccessToken={MAPBOX_TOKEN}
+        mapStyle={MAPBOX_STYLE}
+        initialViewState={{
+          longitude: position[1],
+          latitude:  position[0],
+          zoom:      18,
+          pitch:     60,
+          bearing:   -17,
+        }}
+        style={{ width: '100%', height: '100%' }}
+        onMove={e => setMapCenter([e.viewState.latitude, e.viewState.longitude])}
+        attributionControl={false}
+        logoPosition="bottom-right"
+      />
 
-        <div className="mp-modal-form">
-          <label className="mp-modal-field-label">Nom {typeFr}</label>
-          <input
-            className="mp-modal-input"
-            type="text"
-            placeholder={placeholder}
-            value={label}
-            onChange={e => setLabel(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && onConfirm(label || typeFr)}
-            autoFocus
-          />
+      {/* ── Pin fixe au centre de l'écran ── */}
+      <div className="mp-imm-pin-wrap" aria-hidden>
+        <div className={`mp-imm-pin mp-imm-pin-${type}`}>
+          {type === 'busstop' ? (
+            <svg viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="14" fill="#1255a0" stroke="white" strokeWidth="2.5"/>
+              <rect x="9"  y="9"  width="14" height="9"  rx="2" fill="white" opacity=".9"/>
+              <rect x="9"  y="12" width="14" height="2.5" fill="#FFD700"/>
+              <circle cx="12" cy="23" r="2.5" fill="white"/>
+              <circle cx="20" cy="23" r="2.5" fill="white"/>
+            </svg>
+          ) : (
+            <svg viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="14" fill="#e6b800" stroke="white" strokeWidth="2.5"/>
+              <path d="M16 7L9 12v12h14V12L16 7z" fill="white" opacity=".9"/>
+              <rect x="12.5" y="16" width="3"  height="8" fill="#e6b800"/>
+              <rect x="16.5" y="16" width="3"  height="8" fill="#e6b800"/>
+              <rect x="11"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
+              <rect x="17"   y="11" width="4"  height="4" rx=".5" fill="#e6b800"/>
+            </svg>
+          )}
         </div>
+        {/* Ombre projetée vers le bas */}
+        <div className="mp-imm-pin-shadow" />
+        {/* Pulse ring */}
+        <div className={`mp-imm-pulse mp-imm-pulse-${type}`} />
+      </div>
 
-        <div className="mp-modal-actions">
-          <button className="mp-modal-btn mp-modal-cancel"  onClick={onCancel}>
+      {/* ── Header ── */}
+      <div className="mp-imm-header">
+        <button className="mp-imm-back" onClick={onCancel} aria-label="Annuler">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div className="mp-imm-header-info">
+          <span className="mp-imm-type">{typeFr} / {typeEn}</span>
+          <span className="mp-imm-coords">
+            {mapCenter[0].toFixed(5)}, {mapCenter[1].toFixed(5)}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Panneau bas ── */}
+      <div className="mp-imm-panel">
+        <p className="mp-imm-hint">
+          {type === 'busstop'
+            ? 'Déplacez la carte pour positionner l\'arrêt avec précision'
+            : 'Déplacez la carte pour positionner la station avec précision'}
+        </p>
+        <input
+          className="mp-imm-input"
+          type="text"
+          placeholder={placeholder}
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+        />
+        <div className="mp-imm-actions">
+          <button className="mp-imm-btn-cancel" onClick={onCancel}>
             Annuler
           </button>
-          <button
-            className="mp-modal-btn mp-modal-confirm"
-            onClick={() => onConfirm(label || typeFr)}
-          >
+          <button className="mp-imm-btn-confirm" onClick={handleConfirm}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
             Confirmer
           </button>
         </div>
@@ -133,8 +217,36 @@ function MapPage() {
   const [routes,      setRoutes]      = useState<Route[]>([])
   const [stops,       setStops]       = useState<Stop[]>([])
   const [pendingStop, setPendingStop] = useState<{ pos: [number, number]; type: 'busstop' | 'station' } | null>(null)
+  const [menuOpen,    setMenuOpen]    = useState(false)
 
-  const currentIdRef = useRef<string>('')
+  const currentIdRef        = useRef<string>('')
+  const snapTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSnappedCountRef = useRef<Record<string, number>>({})
+
+  // ── Map Matching — snap la route active aux rues réelles ──────────────────
+  // Déclenché à chaque nouveau point, avec 500ms de debounce pour ne pas
+  // surcharger l'API pendant un tracé rapide.
+  useEffect(() => {
+    const active = routes.find(r => !r.finished && r.id === currentIdRef.current)
+    if (!active || active.points.length < 2) return
+
+    // Évite de re-snapper si on n'a pas ajouté de nouveau point
+    const lastCount = lastSnappedCountRef.current[active.id] ?? 0
+    if (active.points.length === lastCount) return
+
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+
+    snapTimerRef.current = setTimeout(async () => {
+      const snapped = await snapToRoads(active.points)
+      if (!snapped) return
+      lastSnappedCountRef.current[active.id] = active.points.length
+      setRoutes(prev =>
+        prev.map(r => r.id === active.id ? { ...r, snappedPoints: snapped } : r)
+      )
+    }, 500)
+
+    return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current) }
+  }, [routes])
 
   // ── Clic sur la carte ──────────────────────────────────────────────────────
   const handleMapClick = useCallback((e: MapMouseEvent) => {
@@ -192,13 +304,13 @@ function MapPage() {
     if (tool === 'eraser') eraseLastItem()
   }, [activeTool, isDrawing, finishRoute, eraseLastItem])
 
-  // ── Confirmer arrêt ────────────────────────────────────────────────────────
-  const handleStopConfirm = useCallback((label: string) => {
+  // ── Confirmer arrêt (position affinée depuis la carte 3D) ─────────────────
+  const handleStopConfirm = useCallback((label: string, refinedPos: [number, number]) => {
     if (!pendingStop) return
     setStops(prev => [...prev, {
       id:       `stop-${Date.now()}`,
       type:     pendingStop.type,
-      position: pendingStop.pos,
+      position: refinedPos,
       label,
     }])
     setPendingStop(null)
@@ -210,7 +322,10 @@ function MapPage() {
     const finishedRoutes = routes.filter(r => r.finished && r.points.length >= 2)
 
     if (finishedRoutes.length > 0)
-      saveRoutes(finishedRoutes.map(r => ({ points: r.points, color: r.color })), sessionId)
+      saveRoutes(
+        finishedRoutes.map(r => ({ points: r.snappedPoints ?? r.points, color: r.color })),
+        sessionId,
+      )
 
     if (stops.length > 0)
       saveStops(stops.map(s => ({ pos: s.position, type: s.type, label: s.label })), sessionId)
@@ -247,15 +362,42 @@ function MapPage() {
         {routes.map(route =>
           route.points.length >= 2 && (
             <Source key={route.id} id={`src-${route.id}`} type="geojson" data={routeGeoJSON(route)}>
+              {/* Casing blanc en dessous — donne un contour qui épouse la route */}
+              <Layer
+                id={`lyr-casing-${route.id}`}
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': '#ffffff',
+                  'line-width': [
+                    'interpolate', ['exponential', 1.6], ['zoom'],
+                    10, 3,
+                    13, 6,
+                    15, 10,
+                    17, 16,
+                    19, 26,
+                  ],
+                  'line-opacity': route.finished ? 0.25 : 0.12,
+                  'line-blur': 1,
+                }}
+              />
+              {/* Ligne colorée par-dessus */}
               <Layer
                 id={`lyr-${route.id}`}
                 type="line"
                 layout={{ 'line-cap': 'round', 'line-join': 'round' }}
                 paint={{
-                  'line-color':   route.color,
-                  'line-width':   5,
-                  'line-opacity': route.finished ? 0.9 : 0.6,
-                  ...(route.finished ? {} : { 'line-dasharray': [3, 3] }),
+                  'line-color': route.color,
+                  'line-width': [
+                    'interpolate', ['exponential', 1.6], ['zoom'],
+                    10, 2,
+                    13, 4,
+                    15, 7,
+                    17, 11,
+                    19, 18,
+                  ],
+                  'line-opacity': route.finished ? 0.88 : 0.55,
+                  ...(route.finished ? {} : { 'line-dasharray': [4, 3] }),
                 }}
               />
             </Source>
@@ -301,123 +443,128 @@ function MapPage() {
       </Map>
 
       {/* ── Hint de dessin ── */}
-      {activeTool === 'pencil' && !isDrawing && (
+      {activeTool === 'pencil' && !isDrawing && menuOpen && (
         <div className="mp-hint">Appuyez sur la carte pour commencer une ligne</div>
       )}
       {activeTool === 'pencil' && isDrawing && (
-        <div className="mp-hint mp-hint-drawing">
-          Appuyez pour ajouter des points
-        </div>
+        <div className="mp-hint mp-hint-drawing">Appuyez pour ajouter des points</div>
       )}
 
       {/* ── Toolbar flottant ── */}
       <div className="mp-float-toolbar">
 
-        {/* Rangée outils */}
-        <div className="mp-ft-row mp-ft-tools">
+        {/* Panneau outils — déployable ── */}
+        <div className={`mp-ft-menu ${menuOpen ? 'mp-ft-menu-open' : ''}`}>
 
-          {/* Crayon */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'pencil' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('pencil')}
-            title="Tracer une ligne"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-            </svg>
-          </button>
+          {/* Ligne 1 : crayon + palette + terminer */}
+          <div className="mp-ft-menu-row">
+            <button
+              className={`mp-ft-btn ${activeTool === 'pencil' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('pencil')}
+              title="Tracer une ligne"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+              </svg>
+            </button>
 
-          {/* Palette — visible quand crayon actif */}
-          {activeTool === 'pencil' && (
             <div className="mp-ft-palette">
               {ROUTE_COLORS.map(c => (
                 <button
                   key={c.value}
                   className={`mp-ft-dot ${activeColor === c.value ? 'mp-ft-dot-on' : ''}`}
                   style={{ background: c.value }}
-                  onClick={() => setActiveColor(c.value)}
+                  onClick={() => { setActiveColor(c.value); setActiveTool('pencil') }}
                   title={c.label}
                 />
               ))}
             </div>
-          )}
 
-          {/* Terminer — visible pendant tracé */}
-          {isDrawing && (
-            <button className="mp-ft-btn mp-ft-finish" onClick={finishRoute} title="Terminer la ligne">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            </button>
-          )}
-
-          <div className="mp-ft-sep" />
-
-          {/* Gomme */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'eraser' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('eraser')}
-            title="Effacer le dernier élément"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/>
-              <path d="M6 17.5l3-3"/>
-            </svg>
-          </button>
-
-          {/* Arrêt */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'busstop' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('busstop')}
-            title="Placer un arrêt de bus"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <rect x="3" y="3" width="18" height="12" rx="2"/>
-              <path d="M7 15v2M17 15v2M3 9h18"/>
-              <circle cx="7.5"  cy="19" r="2"/>
-              <circle cx="16.5" cy="19" r="2"/>
-            </svg>
-          </button>
-
-          {/* Station */}
-          <button
-            className={`mp-ft-btn ${activeTool === 'station' ? 'mp-ft-active' : ''}`}
-            onClick={() => handleToolChange('station')}
-            title="Placer une station"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M3 21h18M5 21V7l7-4 7 4v14"/>
-              <path d="M9 21v-4a2 2 0 0 1 4 0v4"/>
-            </svg>
-          </button>
-
-          <div className="mp-ft-sep" />
-
-          {/* Résultats */}
-          <button
-            className="mp-ft-btn mp-ft-results"
-            onClick={() => navigate('/results')}
-            title="Voir la carte citoyenne"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Rangée stats + Suivant */}
-        <div className="mp-ft-row mp-ft-actions">
-          <div className="mp-ft-stats">
-            <span>
-              <strong>{finishedCount}</strong> ligne{finishedCount !== 1 ? 's' : ''}
-            </span>
-            {stopCount > 0 && (
-              <span><strong>{stopCount}</strong> arrêt{stopCount !== 1 ? 's' : ''}</span>
-            )}
-            {stationCount > 0 && (
-              <span><strong>{stationCount}</strong> gare{stationCount !== 1 ? 's' : ''}</span>
+            {isDrawing && (
+              <button className="mp-ft-btn mp-ft-finish" onClick={finishRoute} title="Terminer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
             )}
           </div>
+
+          {/* Ligne 2 : gomme, arrêt, station, résultats */}
+          <div className="mp-ft-menu-row">
+            <button
+              className={`mp-ft-btn ${activeTool === 'eraser' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('eraser')}
+              title="Effacer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/>
+                <path d="M6 17.5l3-3"/>
+              </svg>
+            </button>
+
+            <button
+              className={`mp-ft-btn ${activeTool === 'busstop' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('busstop')}
+              title="Arrêt de bus"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <rect x="3" y="3" width="18" height="12" rx="2"/>
+                <path d="M7 15v2M17 15v2M3 9h18"/>
+                <circle cx="7.5"  cy="19" r="2"/>
+                <circle cx="16.5" cy="19" r="2"/>
+              </svg>
+            </button>
+
+            <button
+              className={`mp-ft-btn ${activeTool === 'station' ? 'mp-ft-active' : ''}`}
+              onClick={() => handleToolChange('station')}
+              title="Station"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M3 21h18M5 21V7l7-4 7 4v14"/>
+                <path d="M9 21v-4a2 2 0 0 1 4 0v4"/>
+              </svg>
+            </button>
+
+            <div className="mp-ft-sep" />
+
+            <button
+              className="mp-ft-btn mp-ft-results"
+              onClick={() => navigate('/results')}
+              title="Carte citoyenne"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Barre principale — toujours visible ── */}
+        <div className="mp-ft-row mp-ft-actions">
+
+          {/* Bouton hamburger */}
+          <button
+            className={`mp-ft-burger ${menuOpen ? 'mp-ft-burger-open' : ''}`}
+            onClick={() => setMenuOpen(o => !o)}
+            title="Outils"
+          >
+            <span /><span /><span />
+          </button>
+
+          {/* Outil actif — badge contextuel */}
+          <div className="mp-ft-active-badge">
+            {activeTool === 'pencil'  && <span style={{ color: activeColor }}>● Tracer</span>}
+            {activeTool === 'eraser'  && <span>✕ Gomme</span>}
+            {activeTool === 'busstop' && <span>🚏 Arrêt</span>}
+            {activeTool === 'station' && <span>🏢 Station</span>}
+          </div>
+
+          <div className="mp-ft-stats">
+            {finishedCount > 0 && <span><strong>{finishedCount}</strong> ligne{finishedCount !== 1 ? 's' : ''}</span>}
+            {stopCount     > 0 && <span><strong>{stopCount}</strong> arrêt{stopCount !== 1 ? 's' : ''}</span>}
+          </div>
+
           <button className="mp-ft-next" onClick={handleNext}>
             Suivant
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -427,9 +574,9 @@ function MapPage() {
         </div>
       </div>
 
-      {/* ── Modal arrêt ── */}
+      {/* ── Modal immersif 3D ── */}
       {pendingStop && (
-        <StopModal
+        <ImmersiveStopModal
           position={pendingStop.pos}
           type={pendingStop.type}
           onConfirm={handleStopConfirm}
