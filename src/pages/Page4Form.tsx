@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fireSubmissionConfirmation } from '@/lib/participation'
 import { clearMapDraft } from '@/pages/MapPage'
+import { getLang, FORM_T } from '@/lib/lang'
 
 interface FormData {
   nom: string
@@ -15,6 +16,8 @@ const EMPTY: FormData = { nom: '', prenom: '', adresse: '', email: '', suggestio
 
 function Page4Form() {
   const navigate = useNavigate()
+  const lang     = getLang()
+  const t        = FORM_T[lang]
   const [form, setForm]       = useState<FormData>(EMPTY)
   const [sent, setSent]       = useState(false)
   const [errors, setErrors]   = useState<Partial<FormData>>({})
@@ -25,12 +28,12 @@ function Page4Form() {
 
   const validate = (): boolean => {
     const e: Partial<FormData> = {}
-    if (!form.nom.trim())       e.nom       = 'Requis'
-    if (!form.prenom.trim())    e.prenom    = 'Requis'
-    if (!form.adresse.trim())   e.adresse   = 'Requis'
-    if (!form.email.trim())     e.email     = 'Requis'
+    if (!form.nom.trim())       e.nom       = t.required
+    if (!form.prenom.trim())    e.prenom    = t.required
+    if (!form.adresse.trim())   e.adresse   = t.required
+    if (!form.email.trim())     e.email     = t.required
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-                                e.email     = 'Courriel invalide'
+                                e.email     = t.emailInvalid
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -39,9 +42,8 @@ function Page4Form() {
     e.preventDefault()
     if (!validate()) return
     setSent(true)
-    clearMapDraft()   // effacer le brouillon après soumission réussie
-    // Notification de confirmation si permission accordée
-    fireSubmissionConfirmation('fr')
+    clearMapDraft()
+    fireSubmissionConfirmation(lang)
   }
 
   if (sent) {
@@ -54,16 +56,16 @@ function Page4Form() {
               <polyline points="9 12 11 14 15 10"/>
             </svg>
           </div>
-          <h2 className="f4-success-title">Merci !</h2>
+          <h2 className="f4-success-title">{t.successTitle}</h2>
           <p className="f4-success-sub">
-            Votre suggestion a bien été reçue.<br/>
-            <span>Thank you! Your suggestion has been received.</span>
+            {t.successMsg}<br/>
+            <span>{t.successMsgAlt}</span>
           </p>
           <button className="f4-results-btn" onClick={() => navigate('/results')}>
-            Voir la carte citoyenne →
+            {t.viewMap}
           </button>
           <button className="f4-back-btn" onClick={() => navigate('/map')}>
-            ← Retour à la carte
+            {t.backMap}
           </button>
         </div>
       </div>
@@ -82,8 +84,8 @@ function Page4Form() {
             </svg>
           </button>
           <div className="f4-header-text">
-            <h1 className="f4-title">Vos informations</h1>
-            <p className="f4-subtitle">Your information</p>
+            <h1 className="f4-title">{t.title}</h1>
+            <p className="f4-subtitle">{t.subtitle}</p>
           </div>
           <div className="f4-logo">BMT</div>
         </div>
@@ -93,7 +95,7 @@ function Page4Form() {
 
           <div className="f4-row">
             <div className="f4-field">
-              <label className="f4-label">Nom <span>/ Last name</span></label>
+              <label className="f4-label">{t.labelNom} <span>/ {t.labelNomSub}</span></label>
               <input
                 className={`f4-input ${errors.nom ? 'f4-input-error' : ''}`}
                 type="text"
@@ -105,7 +107,7 @@ function Page4Form() {
             </div>
 
             <div className="f4-field">
-              <label className="f4-label">Prénom <span>/ First name</span></label>
+              <label className="f4-label">{t.labelPrenom} <span>/ {t.labelPrenomSub}</span></label>
               <input
                 className={`f4-input ${errors.prenom ? 'f4-input-error' : ''}`}
                 type="text"
@@ -118,7 +120,7 @@ function Page4Form() {
           </div>
 
           <div className="f4-field">
-            <label className="f4-label">Adresse <span>/ Address</span></label>
+            <label className="f4-label">{t.labelAdresse} <span>/ {t.labelAdresseSub}</span></label>
             <input
               className={`f4-input ${errors.adresse ? 'f4-input-error' : ''}`}
               type="text"
@@ -130,7 +132,7 @@ function Page4Form() {
           </div>
 
           <div className="f4-field">
-            <label className="f4-label">Courriel <span>/ Email</span></label>
+            <label className="f4-label">{t.labelEmail} <span>/ {t.labelEmailSub}</span></label>
             <input
               className={`f4-input ${errors.email ? 'f4-input-error' : ''}`}
               type="email"
@@ -142,10 +144,10 @@ function Page4Form() {
           </div>
 
           <div className="f4-field">
-            <label className="f4-label">Suggestion <span>/ Suggestion</span></label>
+            <label className="f4-label">{t.labelSuggestion} <span>/ {t.labelSuggestionSub}</span></label>
             <textarea
               className="f4-textarea"
-              placeholder="Décrivez votre suggestion de ligne de bus… / Describe your bus route suggestion…"
+              placeholder={t.placeholderSuggestion}
               value={form.suggestion}
               onChange={set('suggestion')}
               rows={4}
@@ -153,7 +155,7 @@ function Page4Form() {
           </div>
 
           <button className="f4-submit" type="submit">
-            <span>Envoyer / Send</span>
+            <span>{t.send}</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="22" y1="2" x2="11" y2="13"/>
               <polygon points="22 2 15 22 11 13 2 9 22 2"/>
