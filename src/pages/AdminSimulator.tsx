@@ -823,7 +823,7 @@ function AdminSimulator() {
           style={{ cursor: addingStop ? 'crosshair' : undefined }}
         >
           <TileLayer
-            url="https://api.mapbox.com/styles/v1/erenjager/cmnxylxae002401s4c7v68c3x/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ"
+            url="https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ"
             attribution='&copy; <a href="https://mapbox.com">Mapbox</a>'
             tileSize={512}
             zoomOffset={-1}
