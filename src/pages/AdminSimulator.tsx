@@ -14,6 +14,7 @@ import {
 } from '@/lib/equity'
 import { computeRidership, RidershipResult } from '@/lib/ridership'
 import { getRoutes, ensureSeedData } from '@/lib/storage'
+import { getLang, ADMIN_T } from '@/lib/lang'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -153,6 +154,7 @@ interface DraggableStopProps {
 }
 
 function DraggableStop({ stop, onDragEnd, onToggle, showCoverage }: DraggableStopProps) {
+  const t      = ADMIN_T[getLang()]
   const radius = stop.type === 'station' ? STATION_RADIUS : COVERAGE_RADIUS
   const coverageColor = stop.active
     ? stop.demand >= 25 ? '#2ecc71' : stop.demand >= 12 ? '#f39c12' : '#ecf0f1'
@@ -194,7 +196,7 @@ function DraggableStop({ stop, onDragEnd, onToggle, showCoverage }: DraggableSto
                 fontSize: '0.82rem', fontWeight: 700,
               }}
             >
-              {stop.active ? 'Désactiver' : 'Activer'}
+              {stop.active ? t.stopDeact : t.stopActivate}
             </button>
           </div>
         </Popup>
@@ -221,12 +223,13 @@ function TabAchalandage({
 }: {
   ridershipResult: RidershipResult | null
 }) {
+  const t    = ADMIN_T[getLang()]
   const [peak, setPeak] = useState(false)
 
   if (!ridershipResult) {
     return (
       <div className="sim-tab-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
-        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>Calcul achalandage…</p>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>{t.simLoadRid}</p>
       </div>
     )
   }
@@ -243,14 +246,14 @@ function TabAchalandage({
       <div className="sim-total-card">
         <div className="sim-total-value">{displayed.toLocaleString()}</div>
         <div className="sim-total-label">
-          {peak ? 'montées / heure de pointe' : 'passagers / jour estimés'}
+          {peak ? t.ridPeakUnit : t.ridDayUnit}
         </div>
       </div>
 
       {/* ── Toggle pointe ── */}
       <div className="sim-toggle-row" style={{ marginBottom: 10 }}>
         <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)' }}>
-          Heure de pointe (×2,9 h AM+PM)
+          {t.ridPeakToggle}
         </span>
         <button className={`sim-toggle ${peak ? 'sim-toggle-on' : ''}`} onClick={() => setPeak(v => !v)}>
           {peak ? 'ON' : 'OFF'}
@@ -260,21 +263,21 @@ function TabAchalandage({
       {/* ── Indicateurs financiers ── */}
       <div className="rid-fin-card">
         <div className="rid-fin-row">
-          <span>Recettes billetterie</span>
+          <span>{t.ridRevenue}</span>
           <strong>{ridershipResult.systemRevenue.toLocaleString()} $/j</strong>
         </div>
         <div className="rid-fin-row">
-          <span>Récupération tarifaire</span>
+          <span>{t.ridFarebox}</span>
           <strong style={{ color: fbrColor }}>{ridershipResult.fareboxRecovery} %</strong>
         </div>
         <div className="rid-fin-row">
-          <span>Parc min. heure de pointe</span>
-          <strong>{ridershipResult.busesRequired} autobus</strong>
+          <span>{t.ridBuses}</span>
+          <strong>{ridershipResult.busesRequired} {t.ridBusUnit}</strong>
         </div>
       </div>
 
       {/* ── Barres par ligne ── */}
-      <p className="sim-section-title">Achalandage par ligne</p>
+      <p className="sim-section-title">{t.ridByLine}</p>
       <div className="sim-ridership-list">
         {ridershipResult.routes.map(r => {
           const val   = peak ? r.peakRiders : r.dailyRiders
@@ -295,7 +298,7 @@ function TabAchalandage({
               </div>
               {r.active && (
                 <div className="rid-route-meta">
-                  Part modale {r.avgModeSplit.toFixed(1)} % · {r.revenuePerDay.toLocaleString()} $/j
+                  {t.ridModeSplit(r.avgModeSplit.toFixed(1), r.revenuePerDay)}
                 </div>
               )}
             </div>
@@ -310,12 +313,11 @@ function TabAchalandage({
           background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.15)',
           fontSize: '0.73rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.5,
         }}>
-          <span style={{ color: '#FFD700', fontWeight: 700 }}>Analyse : </span>
-          {ridershipResult.topRoute.label} génère le plus de montées (
-          {ridershipResult.topRoute.dailyRiders.toLocaleString()} pass./j).
+          <span style={{ color: '#FFD700', fontWeight: 700 }}>{t.ridAnalysis}</span>
+          {t.ridTopRoute(ridershipResult.topRoute.label, ridershipResult.topRoute.dailyRiders)}
           {ridershipResult.fareboxRecovery < 20 && (
             <span style={{ color: '#f39c12' }}>
-              {' '}La récupération tarifaire ({ridershipResult.fareboxRecovery} %) est sous le seuil recommandé (20 %).
+              {' '}{t.ridFbWarn(ridershipResult.fareboxRecovery)}
             </span>
           )}
         </div>
@@ -339,9 +341,10 @@ function TabScenarios({
   scenarios: { A: Scenario | null; B: Scenario | null }
   onSave: (slot: 'A' | 'B') => void
 }) {
+  const t       = ADMIN_T[getLang()]
   const m       = computeMetrics(stops)
   const current: Scenario = {
-    id: 'current', label: 'En cours',
+    id: 'current', label: t.scenCurrent,
     stops, routes,
     coveragePct:  m.coveragePct,
     ridership:    computeTotalRidership(routes, stops, false),
@@ -365,20 +368,20 @@ function TabScenarios({
         {(['A', 'B'] as const).map(slot => (
           <div key={slot} className="sim-scenario-slot">
             <div className="sim-scenario-slot-header">
-              <span className="sim-scenario-slot-label">Scénario {slot}</span>
+              <span className="sim-scenario-slot-label">{t.scenSlot(slot)}</span>
               <button className="sim-scenario-save-btn" onClick={() => onSave(slot)}>
-                Sauvegarder
+                {t.scenSave}
               </button>
             </div>
             {scenarios[slot] ? (
               <div className="sim-scenario-metrics">
-                <span className="sim-scenario-metric">Couverture <strong>{scenarios[slot]!.coveragePct}%</strong></span>
-                <span className="sim-scenario-metric">Passagers <strong>{scenarios[slot]!.ridership.toLocaleString()}</strong></span>
-                <span className="sim-scenario-metric">Zones mortes <strong>{scenarios[slot]!.deadZones}</strong></span>
-                <span className="sim-scenario-metric">Arrêts actifs <strong>{scenarios[slot]!.activeStops}</strong></span>
+                <span className="sim-scenario-metric">{t.scenCov} <strong>{scenarios[slot]!.coveragePct}%</strong></span>
+                <span className="sim-scenario-metric">{t.scenPass} <strong>{scenarios[slot]!.ridership.toLocaleString()}</strong></span>
+                <span className="sim-scenario-metric">{t.scenDead} <strong>{scenarios[slot]!.deadZones}</strong></span>
+                <span className="sim-scenario-metric">{t.scenActive} <strong>{scenarios[slot]!.activeStops}</strong></span>
               </div>
             ) : (
-              <span className="sim-scenario-empty">Aucun scénario sauvegardé</span>
+              <span className="sim-scenario-empty">{t.scenEmpty}</span>
             )}
           </div>
         ))}
@@ -387,14 +390,14 @@ function TabScenarios({
       {/* Tableau comparatif */}
       {defined.length > 1 && (
         <>
-          <p className="sim-section-title">Comparaison</p>
+          <p className="sim-section-title">{t.scenCompare}</p>
           <table className="sim-compare-table">
             <thead>
               <tr>
-                <th>Scénario</th>
-                <th>Couv.</th>
-                <th>Pass./j</th>
-                <th>Zones⚠</th>
+                <th>{t.scenThScen}</th>
+                <th>{t.scenThCov}</th>
+                <th>{t.scenThPass}</th>
+                <th>{t.scenThDead}</th>
               </tr>
             </thead>
             <tbody>
@@ -404,7 +407,7 @@ function TabScenarios({
                 return (
                   <tr key={s.id}>
                     <td className={isCurrent ? 'sim-compare-current' : ''}>
-                      {isCurrent ? '● En cours' : `Scénario ${s.id}`}
+                      {isCurrent ? t.scenCurrent : t.scenSlot(s.id)}
                     </td>
                     <td className={
                       s.coveragePct === bestCov    ? 'sim-compare-best'
@@ -430,7 +433,7 @@ function TabScenarios({
             </tbody>
           </table>
           <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', marginTop: 8, lineHeight: 1.5 }}>
-            Vert = meilleur · Rouge = moins performant
+            {t.scenNote}
           </div>
         </>
       )}
@@ -441,10 +444,11 @@ function TabScenarios({
 // ─── Tab : Équité ────────────────────────────────────────────────────────────
 
 function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
+  const t = ADMIN_T[getLang()]
   if (!equityResult) {
     return (
       <div className="sim-tab-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
-        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>Calcul équité…</p>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>{t.simLoadEq}</p>
       </div>
     )
   }
@@ -462,17 +466,17 @@ function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
             <span className="eq-kpi-value" style={{ color: wgColor }}>
               {wg > 0 ? '+' : ''}{wg}
             </span>
-            <span className="eq-kpi-label">écart pondéré</span>
+            <span className="eq-kpi-label">{t.eqWGap}</span>
           </div>
           <div className="eq-kpi">
             <span className="eq-kpi-value" style={{ color: equityResult.criticalZones.length > 0 ? '#e74c3c' : '#2ecc71' }}>
               {equityResult.criticalZones.length}
             </span>
-            <span className="eq-kpi-label">zones critiques</span>
+            <span className="eq-kpi-label">{t.eqCritZones}</span>
           </div>
           <div className="eq-kpi">
             <span className="eq-kpi-value">{equityResult.avgServiceScore}%</span>
-            <span className="eq-kpi-label">service moyen</span>
+            <span className="eq-kpi-label">{t.eqAvgSvc}</span>
           </div>
         </div>
 
@@ -482,7 +486,7 @@ function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
             background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.2)',
             fontSize: '0.70rem', color: '#e74c3c',
           }}>
-            ⚠ Priorité : {equityResult.criticalZones[0].zone.name} (écart +{equityResult.criticalZones[0].gap} pts)
+            {t.eqCritWarn(equityResult.criticalZones[0].zone.name, equityResult.criticalZones[0].gap)}
           </div>
         ) : (
           <div style={{
@@ -490,13 +494,13 @@ function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
             background: 'rgba(46,204,113,0.07)', border: '1px solid rgba(46,204,113,0.2)',
             fontSize: '0.70rem', color: '#2ecc71',
           }}>
-            ✓ Aucune zone en déficit critique
+            {t.eqOk}
           </div>
         )}
       </div>
 
       {/* ── Zones triées par écart ── */}
-      <p className="sim-section-title">Équité par zone</p>
+      <p className="sim-section-title">{t.eqByZone}</p>
       <div className="eq-zone-list">
         {equityResult.scores.map(score => {
           const color = gapLevelColor(score.gapLevel)
@@ -510,9 +514,9 @@ function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
                 </span>
               </div>
 
-              {/* Besoin */}
+              {/* Need */}
               <div className="eq-bar-row">
-                <span className="eq-bar-label">Besoin</span>
+                <span className="eq-bar-label">{t.eqNeed}</span>
                 <div className="eq-bar-track">
                   <div className="eq-bar-fill" style={{ width: `${score.needScore}%`, background: '#c0392b' }} />
                 </div>
@@ -520,7 +524,7 @@ function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
               </div>
               {/* Service */}
               <div className="eq-bar-row">
-                <span className="eq-bar-label">Service</span>
+                <span className="eq-bar-label">{t.eqService}</span>
                 <div className="eq-bar-track">
                   <div className="eq-bar-fill" style={{ width: `${score.serviceScore}%`, background: color }} />
                 </div>
@@ -528,9 +532,9 @@ function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
               </div>
 
               <div className="eq-gap-line" style={{ color }}>
-                Écart : {score.gap > 0 ? '+' : ''}{score.gap} pts
+                {t.eqGap(score.gap)}
                 <span style={{ color: 'rgba(255,255,255,0.25)', marginLeft: 8 }}>
-                  · rev. {score.zone.income.toLocaleString()} $ · {score.zone.seniors}% aînés
+                  · {t.eqMeta(score.zone.income, score.zone.seniors)}
                 </span>
               </div>
             </div>
@@ -548,10 +552,11 @@ function TabEquite({ equityResult }: { equityResult: EquityResult | null }) {
 // ─── Tab : Matrice O-D ───────────────────────────────────────────────────────
 
 function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
+  const t = ADMIN_T[getLang()]
   if (!odMatrix) {
     return (
       <div className="sim-tab-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
-        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>Chargement O-D…</p>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>{t.simLoadOD}</p>
       </div>
     )
   }
@@ -570,11 +575,11 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
         <div className="od-kpi-row">
           <div className="od-kpi">
             <span className="od-kpi-value">{odMatrix.totalTrips.toLocaleString()}</span>
-            <span className="od-kpi-label">voyages/j estimés</span>
+            <span className="od-kpi-label">{t.odTrips}</span>
           </div>
           <div className="od-kpi">
             <span className="od-kpi-value" style={{ color: covColor }}>{odMatrix.coveragePct}%</span>
-            <span className="od-kpi-label">avec desserte</span>
+            <span className="od-kpi-label">{t.odWithSvc}</span>
           </div>
         </div>
 
@@ -590,7 +595,7 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
       </div>
 
       {/* ── Top corridors ── */}
-      <p className="sim-section-title">Corridors les plus demandés</p>
+      <p className="sim-section-title">{t.odTopCor}</p>
       <div className="od-corridor-list">
         {odMatrix.topCorridors.map(cell => {
           const from  = zoneMap.get(cell.fromZoneId) ?? cell.fromZoneId
@@ -611,7 +616,7 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
                 }} />
               </div>
               <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                {cell.trips.toLocaleString()} voy/j · {cell.rawCount} tracé{cell.rawCount > 1 ? 's' : ''} citoyen{cell.rawCount > 1 ? 's' : ''}
+                {t.odCorTrips(cell.trips, cell.rawCount)}
               </div>
             </div>
           )
@@ -621,7 +626,7 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
       {/* ── Demande non desservie ── */}
       {odMatrix.unmetDemand.length > 0 && (
         <>
-          <p className="sim-section-title" style={{ marginTop: 14 }}>Demande non desservie</p>
+          <p className="sim-section-title" style={{ marginTop: 14 }}>{t.odUnmet}</p>
           <div className="od-corridor-list">
             {odMatrix.unmetDemand.map(cell => {
               const from = zoneMap.get(cell.fromZoneId) ?? cell.fromZoneId
@@ -633,7 +638,7 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
                     <span className="od-corridor-trips">{cell.trips.toLocaleString()} voy/j</span>
                   </div>
                   <div style={{ fontSize: '0.62rem', color: '#e74c3c', marginTop: 2 }}>
-                    Aucune desserte directe · {cell.rawCount} citoyen{cell.rawCount > 1 ? 's' : ''} concerné{cell.rawCount > 1 ? 's' : ''}
+                    {t.odUnmetDet(cell.rawCount)}
                   </div>
                 </div>
               )
@@ -648,8 +653,7 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
           background: 'rgba(46,204,113,0.07)', border: '1px solid rgba(46,204,113,0.2)',
           fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)',
         }}>
-          <span style={{ color: '#2ecc71', fontWeight: 700 }}>Excellent ! </span>
-          Tous les corridors prioritaires sont desservis par les lignes actives.
+          {t.odAllServed}
         </div>
       )}
 
@@ -664,6 +668,8 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
 
 function AdminSimulator() {
   const navigate = useNavigate()
+  const lang     = getLang()
+  const t        = ADMIN_T[lang]
   const [stops,        setStops]        = useState<SimStop[]>(INIT_STOPS)
   const [routes,       setRoutes]       = useState<SimRoute[]>(INIT_ROUTES)
   const [showCoverage, setShowCoverage] = useState(true)
@@ -716,7 +722,7 @@ function AdminSimulator() {
   const pct         = coverageResult?.coveragePct ?? metrics.coveragePct
   const dzCount     = coverageResult?.deadZones.length ?? metrics.deadZones
   const impactColor = pct >= 70 ? '#2ecc71' : pct >= 45 ? '#f39c12' : '#e74c3c'
-  const impactLabel = pct >= 70 ? 'Excellent' : pct >= 45 ? 'Acceptable' : 'Insuffisant'
+  const impactLabel = pct >= 70 ? t.simExcellent : pct >= 45 ? t.simAccept : t.simInsuff
 
   const handleDragEnd = useCallback((id: string, pos: [number, number]) => {
     setStops(prev => prev.map(s => s.id === id ? { ...s, pos } : s))
@@ -739,7 +745,7 @@ function AdminSimulator() {
   const handleAddStop = useCallback((pos: [number, number]) => {
     const id = `new-${++counterRef.current}`
     setStops(prev => [...prev, {
-      id, label: `Nouvel arrêt #${counterRef.current}`,
+      id, label: t.simNewStop(counterRef.current),
       type: 'busstop', pos, active: true, demand: 5,
     }])
     setAddingStop(false)
@@ -776,11 +782,11 @@ function AdminSimulator() {
   }, [stops, routes, coverageResult, ridershipResult])
 
   const TABS: { id: TabId; label: string }[] = [
-    { id: 'simulation',  label: 'Simulation'  },
-    { id: 'achalandage', label: 'Achalandage' },
-    { id: 'scenarios',   label: 'Scénarios'   },
-    { id: 'od',          label: 'O-D'         },
-    { id: 'equite',      label: 'Équité'      },
+    { id: 'simulation',  label: t.simTabSim  },
+    { id: 'achalandage', label: t.simTabAch  },
+    { id: 'scenarios',   label: t.simTabScen },
+    { id: 'od',          label: t.simTabOD   },
+    { id: 'equite',      label: t.simTabEq   },
   ]
 
   return (
@@ -861,7 +867,7 @@ function AdminSimulator() {
 
         {addingStop && (
           <div className="mp-hint mp-hint-drawing">
-            Cliquez sur la carte pour placer un nouvel arrêt
+            {t.simClickAdd}
           </div>
         )}
       </div>
@@ -875,8 +881,8 @@ function AdminSimulator() {
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
           <div>
-            <h2 className="sim-title">Simulateur</h2>
-            <p className="sim-subtitle">Impact en temps réel</p>
+            <h2 className="sim-title">{t.simTitle}</h2>
+            <p className="sim-subtitle">{t.simSub}</p>
           </div>
         </div>
 
@@ -884,14 +890,14 @@ function AdminSimulator() {
         <div className="sim-score-card">
           <div className="sim-score-ring" style={{ '--score-color': impactColor, '--score-pct': pct } as React.CSSProperties}>
             <span className="sim-score-value">{pct}%</span>
-            <span className="sim-score-unit">couverture</span>
+            <span className="sim-score-unit">{t.simCoverage}</span>
           </div>
           <div className="sim-score-info">
             <span className="sim-score-label" style={{ color: impactColor }}>{impactLabel}</span>
             <div className="sim-score-details">
-              <span>🚏 {metrics.buses} arrêts actifs</span>
-              <span>🏢 {metrics.stations} stations actives</span>
-              <span>⚠️ {dzCount} zone{dzCount !== 1 ? 's' : ''} morte{dzCount !== 1 ? 's' : ''}</span>
+              <span>🚏 {metrics.buses}</span>
+              <span>🏢 {metrics.stations}</span>
+              <span>⚠️ {t.simDeadZone(dzCount)}</span>
               {coverageResult && (
                 <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem' }}>
                   calc. {coverageResult.computeTimeMs} ms
@@ -903,9 +909,7 @@ function AdminSimulator() {
 
         {lastImpact && (
           <div className={`sim-impact-alert ${lastImpact.type === 'gain' ? 'sim-gain' : 'sim-loss'}`}>
-            {lastImpact.type === 'gain'
-              ? '▲ Impact positif — couverture améliorée'
-              : '▼ Impact négatif — zone découverte'}
+            {lastImpact.type === 'gain' ? t.simGain : t.simLoss}
           </div>
         )}
 
@@ -926,21 +930,21 @@ function AdminSimulator() {
         {activeTab === 'simulation' && (
           <div className="sim-tab-content">
             <div className="sim-section">
-              <p className="sim-section-title">Affichage</p>
+              <p className="sim-section-title">{t.simDisplay}</p>
               <label className="sim-toggle-row">
-                <span>Zones de couverture</span>
+                <span>{t.simCovZones}</span>
                 <button className={`sim-toggle ${showCoverage ? 'sim-toggle-on' : ''}`} onClick={() => setShowCoverage(v => !v)}>
                   {showCoverage ? 'ON' : 'OFF'}
                 </button>
               </label>
               <label className="sim-toggle-row">
-                <span>Lignes de bus</span>
+                <span>{t.simBusLines}</span>
                 <button className={`sim-toggle ${showRoutes ? 'sim-toggle-on' : ''}`} onClick={() => setShowRoutes(v => !v)}>
                   {showRoutes ? 'ON' : 'OFF'}
                 </button>
               </label>
               <label className="sim-toggle-row">
-                <span>Zones mortes {dzCount > 0 ? `(${dzCount})` : ''}</span>
+                <span>{t.simDeadZones}{dzCount > 0 ? ` (${dzCount})` : ''}</span>
                 <button className={`sim-toggle ${showDeadZones ? 'sim-toggle-on' : ''}`} onClick={() => setShowDeadZones(v => !v)}>
                   {showDeadZones ? 'ON' : 'OFF'}
                 </button>
@@ -948,7 +952,7 @@ function AdminSimulator() {
             </div>
 
             <div className="sim-section">
-              <p className="sim-section-title">Lignes ({routes.filter(r=>r.active).length}/{routes.length} actives)</p>
+              <p className="sim-section-title">{t.simLinesN(routes.filter(r=>r.active).length, routes.length)}</p>
               {routes.map(r => (
                 <div key={r.id} className="sim-item-row">
                   <span className="sim-item-dot" style={{ background: r.active ? r.color : '#444' }} />
@@ -961,7 +965,7 @@ function AdminSimulator() {
             </div>
 
             <div className="sim-section sim-section-scroll">
-              <p className="sim-section-title">Arrêts & Stations ({metrics.active}/{stops.length} actifs)</p>
+              <p className="sim-section-title">{t.simStopsN(metrics.active, stops.length)}</p>
               {stops.map(s => (
                 <div key={s.id} className={`sim-item-row ${!s.active ? 'sim-item-inactive' : ''}`}>
                   <span className="sim-item-dot" style={{
@@ -978,10 +982,10 @@ function AdminSimulator() {
 
             <div className="sim-actions">
               <button className={`sim-btn sim-btn-add ${addingStop ? 'sim-btn-active' : ''}`} onClick={() => setAddingStop(v => !v)}>
-                {addingStop ? '✕ Annuler' : '+ Ajouter arrêt'}
+                {addingStop ? t.simCancelAdd : t.simAddStop}
               </button>
               <button className="sim-btn sim-btn-reset" onClick={handleReset}>
-                ↺ Réinitialiser
+                {t.simReset}
               </button>
             </div>
             <div style={{ padding: '0 16px 12px' }}>
@@ -999,7 +1003,7 @@ function AdminSimulator() {
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
                 </svg>
-                Générer la carte finale →
+                {t.simGenFinal}
               </button>
             </div>
           </div>

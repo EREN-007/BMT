@@ -15,8 +15,9 @@ import { aggregate, AggregationResult } from '@/lib/aggregation'
 import { getRoutes, getStops, ensureSeedData } from '@/lib/storage'
 import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
 import {
-  computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
+  computeEquity, gapLevelColor, EquityResult, EQ_ZONES,
 } from '@/lib/equity'
+import { getLang, ADMIN_T } from '@/lib/lang'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -199,8 +200,9 @@ function odOpacity(count: number): number {
 // ─── Density badge ─────────────────────────────────────────────────────────────
 
 function DensityBadge({ count, max }: { count: number; max: number }) {
+  const t     = ADMIN_T[getLang()]
   const color = densityColor(count, max)
-  const label = count / max >= 0.65 ? 'Très demandé' : count / max >= 0.30 ? 'Demandé' : 'Peu demandé'
+  const label = count / max >= 0.65 ? t.denHigh : count / max >= 0.30 ? t.denMed : t.denLow
   return (
     <span style={{
       display: 'inline-block', padding: '1px 8px', borderRadius: 10,
@@ -216,6 +218,8 @@ function DensityBadge({ count, max }: { count: number; max: number }) {
 
 function AdminMapPage() {
   const navigate = useNavigate()
+  const lang     = getLang()
+  const t        = ADMIN_T[lang]
   const [showRoutes,   setShowRoutes]   = useState(true)
   const [showStops,    setShowStops]    = useState(true)
   const [showStations, setShowStations] = useState(true)
@@ -291,7 +295,7 @@ function AdminMapPage() {
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
-            Dashboard
+            {t.navDash}
           </a>
           <a className="db-nav-item db-nav-active">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -299,13 +303,13 @@ function AdminMapPage() {
               <line x1="8" y1="2" x2="8" y2="18"/>
               <line x1="16" y1="6" x2="16" y2="22"/>
             </svg>
-            Carte mère
+            {t.navMap}
           </a>
           <a className="db-nav-item" style={{cursor:'pointer'}} onClick={() => navigate('/simulateur')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Simulateur
+            {t.navSim}
           </a>
           <a className="db-nav-item" style={{cursor:'pointer'}} onClick={() => navigate('/carte-finale')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -313,129 +317,126 @@ function AdminMapPage() {
               <polyline points="14 2 14 8 20 8"/>
               <line x1="16" y1="13" x2="8" y2="13"/>
             </svg>
-            Carte finale
+            {t.navFinal}
           </a>
         </nav>
 
         {/* Légende heatmap */}
         <div className="adm-legend">
-          <p className="adm-legend-title">Intensité de demande</p>
+          <p className="adm-legend-title">{t.legendTitle}</p>
 
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#e74c3c' }} />
-              <span className="adm-heat-label">Très demandé</span>
+              <span className="adm-heat-label">{t.legHigh}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#f39c12' }} />
-              <span className="adm-heat-label">Demandé</span>
+              <span className="adm-heat-label">{t.legMed}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#ecf0f1', border: '1px solid rgba(255,255,255,0.2)' }} />
-              <span className="adm-heat-label">Peu demandé</span>
+              <span className="adm-heat-label">{t.legLow}</span>
             </div>
           </div>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Afficher</p>
+          <p className="adm-legend-title">{t.legShow}</p>
 
           <label className="adm-legend-item">
             <input type="checkbox" checked={showRoutes}   onChange={e => setShowRoutes(e.target.checked)} />
-            <span className="adm-legend-name">Lignes ({livecorridors.length})</span>
+            <span className="adm-legend-name">{t.legLines(livecorridors.length)}</span>
           </label>
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStops}    onChange={e => setShowStops(e.target.checked)} />
-            <span className="adm-legend-name">Arrêts ({liveStops.length})</span>
+            <span className="adm-legend-name">{t.legStops(liveStops.length)}</span>
           </label>
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStations} onChange={e => setShowStations(e.target.checked)} />
-            <span className="adm-legend-name">Stations ({liveStations.length})</span>
+            <span className="adm-legend-name">{t.legStations(liveStations.length)}</span>
           </label>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Analyse d'équité</p>
+          <p className="adm-legend-title">{t.legEquity}</p>
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#e74c3c' }} />
-              <span className="adm-heat-label">Critique (écart ≥ 20)</span>
+              <span className="adm-heat-label">{t.eqCritical}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#f39c12' }} />
-              <span className="adm-heat-label">Modéré (écart ≥ 10)</span>
+              <span className="adm-heat-label">{t.eqModerate}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#f1c40f' }} />
-              <span className="adm-heat-label">Adéquat</span>
+              <span className="adm-heat-label">{t.eqAdequate}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#2ecc71' }} />
-              <span className="adm-heat-label">Surplus de service</span>
+              <span className="adm-heat-label">{t.eqSurplus}</span>
             </div>
           </div>
           {equityResult && (
             <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', margin: '4px 0 6px' }}>
-              Écart pondéré : {equityResult.weightedGap > 0 ? '+' : ''}{equityResult.weightedGap} pts
+              {t.eqGapVal(equityResult.weightedGap)}
               {equityResult.criticalZones.length > 0 && (
-                <span style={{ color: '#e74c3c' }}> · {equityResult.criticalZones.length} critique{equityResult.criticalZones.length > 1 ? 's' : ''}</span>
+                <span style={{ color: '#e74c3c' }}> · {t.eqCritN(equityResult.criticalZones.length)}</span>
               )}
             </div>
           )}
           <label className="adm-legend-item">
             <input type="checkbox" checked={showEquity} onChange={e => setShowEquity(e.target.checked)} />
-            <span className="adm-legend-name">Zones d'équité ({EQ_ZONES.length})</span>
+            <span className="adm-legend-name">{t.legEquityZones(EQ_ZONES.length)}</span>
           </label>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Matrice O-D</p>
+          <p className="adm-legend-title">{t.legOD}</p>
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span style={{ display:'inline-block', width:24, height:3, background:'#3498db', opacity:0.9, marginRight:8, borderRadius:2 }} />
-              <span className="adm-heat-label">Desservi</span>
+              <span className="adm-heat-label">{t.odServed}</span>
             </div>
             <div className="adm-heat-row">
               <span style={{ display:'inline-block', width:24, height:2, background:'#e67e22', opacity:0.8, marginRight:8, borderRadius:2, borderTop:'1px dashed #e67e22' }} />
-              <span className="adm-heat-label">Non desservi</span>
+              <span className="adm-heat-label">{t.odUnserved}</span>
             </div>
           </div>
           {odMatrix && (
             <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', margin: '4px 0 6px' }}>
-              {odMatrix.cells.length} corridors · {odMatrix.coveragePct}% couverture
-              {odMatrix.unmetDemand.length > 0 && (
-                <span style={{ color: '#e67e22' }}> · {odMatrix.unmetDemand.length} lacunes</span>
-              )}
+              {t.odInfo(odMatrix.cells.length, odMatrix.coveragePct, odMatrix.unmetDemand.length)}
             </div>
           )}
           <label className="adm-legend-item">
             <input type="checkbox" checked={showOD} onChange={e => setShowOD(e.target.checked)} />
             <span className="adm-legend-name">
-              Lignes de désir ({odMatrix ? odMatrix.cells.length : OD_FLOWS.length})
+              {t.legODLabel(odMatrix ? odMatrix.cells.length : OD_FLOWS.length)}
             </span>
           </label>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Données</p>
+          <p className="adm-legend-title">{t.legData}</p>
           <div className="adm-stats-mini">
             <div className="adm-stat-mini">
               <span>{result ? result.totalRoutes : CORRIDORS.reduce((a,c) => a + c.count, 0)}</span>
-              tracés citoyens
+              {t.datCitizen}
             </div>
             <div className="adm-stat-mini">
               <span>{result ? result.stops.filter(s => s.type === 'busstop').length : BUS_STOPS.length}</span>
-              clusters arrêts
+              {t.datStopClus}
             </div>
             <div className="adm-stat-mini">
               <span>{result ? result.stops.filter(s => s.type === 'station').length : STATIONS.length}</span>
-              clusters stations
+              {t.datStaClus}
             </div>
           </div>
 
           {result && (
             <div style={{ padding: '8px 0 4px', fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>
               <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                {livecorridors.length} corridors · {result.gridStats.activeCells} cellules actives
+                {t.datCorridors(livecorridors.length, result.gridStats.activeCells)}
               </span>
               <br />
-              Mis à jour {new Date(lastUpdate).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+              {t.datUpdated(new Date(lastUpdate).toLocaleTimeString(t.dateLocale, { hour: '2-digit', minute: '2-digit' }))}
             </div>
           )}
 
@@ -448,7 +449,7 @@ function AdminMapPage() {
               fontWeight: 700, cursor: 'pointer', letterSpacing: '0.3px',
             }}
           >
-            ↺ Rafraîchir les données
+            {t.btnRefresh}
           </button>
         </div>
 
@@ -458,7 +459,7 @@ function AdminMapPage() {
             <polyline points="16 17 21 12 16 7"/>
             <line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
-          Déconnexion
+          {t.navLogout}
         </button>
       </aside>
 
@@ -504,7 +505,7 @@ function AdminMapPage() {
                 <div style={{ minWidth: 190 }}>
                   <strong>{c.label}</strong><br />
                   <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {c.count} citoyen{c.count > 1 ? 's' : ''} ont tracé ce corridor
+                    {t.popCorridor(c.count)}
                   </span><br /><br />
                   <DensityBadge count={c.count} max={MAX_ROUTE_LIVE} />
                 </div>
@@ -529,7 +530,7 @@ function AdminMapPage() {
                 <div style={{ minWidth: 180 }}>
                   <strong>🚏 {s.label}</strong><br />
                   <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {s.count} citoyen{s.count > 1 ? 's' : ''} ont voté pour cet arrêt
+                    {t.popStop(s.count)}
                   </span><br /><br />
                   <DensityBadge count={s.count} max={MAX_STOP_LIVE} />
                 </div>
@@ -542,7 +543,7 @@ function AdminMapPage() {
             // Trouver le score calculé pour cette zone (fallback neutre si calcul en cours)
             const score = equityResult?.scores.find(s => s.zone.id === z.id)
             const color = score ? gapLevelColor(score.gapLevel) : '#888'
-            const label = score ? gapLevelLabel(score.gapLevel) : '—'
+            const label = score ? t.eqLevel(score.gapLevel) : '—'
             return (
               <Rectangle
                 key={z.id}
@@ -562,23 +563,23 @@ function AdminMapPage() {
                         <table style={{ fontSize: '0.8rem', width: '100%' }}>
                           <tbody>
                             <tr>
-                              <td style={{ color: '#666' }}>Score besoin</td>
+                              <td style={{ color: '#666' }}>{t.popNeed}</td>
                               <td><strong style={{ color: '#c0392b' }}>{score.needScore} / 100</strong></td>
                             </tr>
                             <tr>
-                              <td style={{ color: '#666' }}>Score service</td>
+                              <td style={{ color: '#666' }}>{t.popService}</td>
                               <td><strong style={{ color }}>{score.serviceScore} / 100</strong></td>
                             </tr>
                             <tr>
-                              <td style={{ color: '#666' }}>Écart</td>
+                              <td style={{ color: '#666' }}>{t.popGap}</td>
                               <td><strong style={{ color }}>
                                 {score.gap > 0 ? '+' : ''}{score.gap} pts
                               </strong></td>
                             </tr>
                             <tr><td colSpan={2}><hr style={{ margin: '4px 0', borderColor: '#eee' }} /></td></tr>
-                            <tr><td style={{ color: '#666' }}>Population</td><td><strong>{z.pop.toLocaleString()}</strong></td></tr>
-                            <tr><td style={{ color: '#666' }}>Revenu médian</td><td><strong>{z.income.toLocaleString()} $</strong></td></tr>
-                            <tr><td style={{ color: '#666' }}>% aînés (65+)</td><td><strong>{z.seniors} %</strong></td></tr>
+                            <tr><td style={{ color: '#666' }}>{t.popPop}</td><td><strong>{z.pop.toLocaleString()}</strong></td></tr>
+                            <tr><td style={{ color: '#666' }}>{t.popIncome}</td><td><strong>{z.income.toLocaleString()} $</strong></td></tr>
+                            <tr><td style={{ color: '#666' }}>{t.popSeniors}</td><td><strong>{z.seniors} %</strong></td></tr>
                           </tbody>
                         </table>
                       </>
@@ -616,7 +617,7 @@ function AdminMapPage() {
                       <div style={{ minWidth: 200 }}>
                         <strong>{fromZone.name} → {toZone.name}</strong><br />
                         <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                          {cell.trips.toLocaleString()} voy/j estimés · {cell.rawCount} tracé{cell.rawCount > 1 ? 's' : ''}
+                          {t.popTrips(cell.trips, cell.rawCount)}
                         </span><br />
                         <span style={{
                           display: 'inline-block', marginTop: 6, padding: '2px 8px',
@@ -625,7 +626,7 @@ function AdminMapPage() {
                           color: cell.covered ? '#3498db' : '#e67e22',
                           border: `1px solid ${cell.covered ? '#3498db55' : '#e67e2255'}`,
                         }}>
-                          {cell.covered ? '✓ Desservi' : '⚠ Non desservi'}
+                          {cell.covered ? t.popServed : t.popUnserved}
                         </span>
                       </div>
                     </Popup>
@@ -648,7 +649,7 @@ function AdminMapPage() {
                   <div style={{ minWidth: 190 }}>
                     <strong>{f.label}</strong><br />
                     <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                      {f.count} déplacements enregistrés
+                      {t.popODFb(f.count)}
                     </span>
                   </div>
                 </Popup>
@@ -674,7 +675,7 @@ function AdminMapPage() {
                 <div style={{ minWidth: 180 }}>
                   <strong>🏢 {s.label}</strong><br />
                   <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {s.count} citoyen{s.count > 1 ? 's' : ''} ont proposé cette station
+                    {t.popStation(s.count)}
                   </span><br /><br />
                   <DensityBadge count={s.count} max={MAX_STA_LIVE} />
                 </div>
@@ -685,7 +686,7 @@ function AdminMapPage() {
 
         {/* Titre flottant */}
         <div className="adm-map-title">
-          <span>Carte de demande citoyenne — Grand Moncton</span>
+          <span>{t.mapPageTitle}</span>
         </div>
       </div>
     </div>

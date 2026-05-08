@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getLang, ADMIN_T } from '@/lib/lang'
 
 interface Props {
   onAuth: () => void
@@ -7,6 +8,9 @@ interface Props {
 
 function AdminLogin({ onAuth }: Props) {
   const navigate = useNavigate()
+  const lang     = getLang()
+  const t        = ADMIN_T[lang]
+
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
@@ -18,16 +22,14 @@ function AdminLogin({ onAuth }: Props) {
     setError('')
 
     if (!username.trim() || !password.trim()) {
-      setError('Veuillez remplir tous les champs. / Please fill in all fields.')
+      setError(t.loginErrFill)
       return
     }
 
     setLoading(true)
 
-    // Simulation authentification — à remplacer par un vrai appel API
     setTimeout(() => {
       setLoading(false)
-      // Credentials demo : admin / bmt2024
       if (
         (username.trim().toLowerCase() === 'admin' || username.trim().toLowerCase() === 'admin@bmt.ca') &&
         password === 'bmt2024'
@@ -35,7 +37,7 @@ function AdminLogin({ onAuth }: Props) {
         onAuth()
         navigate('/dashboard')
       } else {
-        setError('Identifiants invalides. / Invalid credentials.')
+        setError(t.loginErrCreds)
       }
     }, 900)
   }
@@ -53,23 +55,21 @@ function AdminLogin({ onAuth }: Props) {
             </svg>
           </div>
           <div>
-            <h1 className="al-title">Accès Admin</h1>
+            <h1 className="al-title">{t.loginTitle}</h1>
             <p className="al-subtitle">BMT · CME — Grand Moncton</p>
           </div>
         </div>
 
         <p className="al-instructions">
-          Entrez vos identifiants pour accéder au panneau d'administration.<br/>
-          <span>Enter your credentials to access the admin panel.</span>
+          {t.loginInstr}<br/>
+          <span>{t.loginInstrSub}</span>
         </p>
 
         {/* Form */}
         <form className="al-form" onSubmit={handleSubmit} noValidate>
 
           <div className="al-field">
-            <label className="al-label">
-              Utilisateur / Username
-            </label>
+            <label className="al-label">{t.loginUser}</label>
             <div className="al-input-wrap">
               <svg className="al-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -78,7 +78,7 @@ function AdminLogin({ onAuth }: Props) {
               <input
                 className="al-input"
                 type="text"
-                placeholder="admin ou admin@bmt.ca"
+                placeholder="admin"
                 value={username}
                 onChange={e => { setUsername(e.target.value); setError('') }}
                 autoComplete="username"
@@ -88,9 +88,7 @@ function AdminLogin({ onAuth }: Props) {
           </div>
 
           <div className="al-field">
-            <label className="al-label">
-              Code d'accès / Password
-            </label>
+            <label className="al-label">{t.loginPass}</label>
             <div className="al-input-wrap">
               <svg className="al-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -108,7 +106,7 @@ function AdminLogin({ onAuth }: Props) {
                 type="button"
                 className="al-eye"
                 onClick={() => setShowPass(v => !v)}
-                title={showPass ? 'Masquer' : 'Afficher'}
+                title={showPass ? t.loginHide : t.loginShow}
               >
                 {showPass ? (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -142,7 +140,7 @@ function AdminLogin({ onAuth }: Props) {
               <span className="al-spinner" />
             ) : (
               <>
-                <span>Se connecter / Sign in</span>
+                <span>{t.loginBtn}</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
@@ -153,8 +151,8 @@ function AdminLogin({ onAuth }: Props) {
         </form>
 
         <p className="al-hint">
-          Accès réservé aux administrateurs BMT/CME autorisés.<br/>
-          <span>Access restricted to authorized BMT/CME administrators.</span>
+          {t.loginHint}<br/>
+          <span>{t.loginHintSub}</span>
         </p>
 
       </div>

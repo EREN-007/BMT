@@ -1,15 +1,15 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getLang, ADMIN_T } from '@/lib/lang'
 
 // ─── Demo data ─────────────────────────────────────────────────────────────────
 
 const STATS = [
-  { label: 'Soumissions',      labelEn: 'Submissions',    value: 142, icon: 'inbox',   color: '#3498db' },
-  { label: 'Lignes proposées', labelEn: 'Proposed routes', value: 38,  icon: 'route',   color: '#2ecc71' },
-  { label: 'Arrêts de bus',   labelEn: 'Bus stops',       value: 217, icon: 'busstop', color: '#FFD700' },
-  { label: 'Stations / Gares',labelEn: 'Stations',        value: 12,  icon: 'station', color: '#e74c3c' },
+  { labelFr: 'Soumissions',      labelEn: 'Submissions',    value: 142, icon: 'inbox',   color: '#3498db' },
+  { labelFr: 'Lignes proposées', labelEn: 'Proposed routes', value: 38,  icon: 'route',   color: '#2ecc71' },
+  { labelFr: 'Arrêts de bus',   labelEn: 'Bus stops',       value: 217, icon: 'busstop', color: '#FFD700' },
+  { labelFr: 'Stations / Gares',labelEn: 'Stations',        value: 12,  icon: 'station', color: '#e74c3c' },
 ]
-
 
 // ─── Stat icon SVGs ────────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ function StatIcon({ type }: { type: string }) {
 
 // ─── Components ────────────────────────────────────────────────────────────────
 
-function StatCard({ stat }: { stat: typeof STATS[0] }) {
+function StatCard({ stat, lang }: { stat: typeof STATS[0]; lang: 'fr' | 'en' }) {
   return (
     <div className="db-stat-card">
       <div className="db-stat-icon" style={{ background: `${stat.color}18`, color: stat.color }}>
@@ -37,8 +37,8 @@ function StatCard({ stat }: { stat: typeof STATS[0] }) {
       </div>
       <div className="db-stat-body">
         <span className="db-stat-value">{stat.value.toLocaleString()}</span>
-        <span className="db-stat-label">{stat.label}</span>
-        <span className="db-stat-label-en">{stat.labelEn}</span>
+        <span className="db-stat-label">{lang === 'fr' ? stat.labelFr : stat.labelEn}</span>
+        <span className="db-stat-label-en">{lang === 'fr' ? stat.labelEn : stat.labelFr}</span>
       </div>
     </div>
   )
@@ -52,6 +52,8 @@ interface Props {
 
 function AdminDashboard({ onLogout }: Props) {
   const navigate = useNavigate()
+  const lang     = getLang()
+  const t        = ADMIN_T[lang]
 
   const handleLogout = () => {
     onLogout()
@@ -76,14 +78,14 @@ function AdminDashboard({ onLogout }: Props) {
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
-            Dashboard
+            {t.navDash}
           </a>
           <a className="db-nav-item" href="#">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
               <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
             </svg>
-            Soumissions
+            {t.navSubs}
           </a>
           <a className="db-nav-item" onClick={() => navigate('/carte')} style={{cursor:'pointer'}}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -91,13 +93,13 @@ function AdminDashboard({ onLogout }: Props) {
               <line x1="8" y1="2" x2="8" y2="18"/>
               <line x1="16" y1="6" x2="16" y2="22"/>
             </svg>
-            Carte mère
+            {t.navMap}
           </a>
           <a className="db-nav-item" onClick={() => navigate('/simulateur')} style={{cursor:'pointer'}}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Simulateur
+            {t.navSim}
           </a>
           <a className="db-nav-item" href="#">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -106,7 +108,7 @@ function AdminDashboard({ onLogout }: Props) {
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
               <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
-            Utilisateurs
+            {t.navUsers}
           </a>
         </nav>
 
@@ -116,7 +118,7 @@ function AdminDashboard({ onLogout }: Props) {
             <polyline points="16 17 21 12 16 7"/>
             <line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
-          Déconnexion
+          {t.navLogout}
         </button>
       </aside>
 
@@ -126,18 +128,18 @@ function AdminDashboard({ onLogout }: Props) {
         {/* Top bar */}
         <header className="db-topbar">
           <div>
-            <h1 className="db-page-title">Tableau de bord</h1>
-            <p className="db-page-sub">Dashboard — Build Moncton Together</p>
+            <h1 className="db-page-title">{t.dashTitle}</h1>
+            <p className="db-page-sub">{t.dashSub}</p>
           </div>
           <div className="db-topbar-right">
-            <span className="db-date">{new Date().toLocaleDateString('fr-CA', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</span>
+            <span className="db-date">{new Date().toLocaleDateString(t.dateLocale, { weekday:'long', year:'numeric', month:'long', day:'numeric' })}</span>
             <div className="db-avatar">A</div>
           </div>
         </header>
 
         {/* Stats */}
         <section className="db-stats-grid">
-          {STATS.map(s => <StatCard key={s.icon} stat={s} />)}
+          {STATS.map(s => <StatCard key={s.icon} stat={s} lang={lang} />)}
         </section>
 
       </main>
