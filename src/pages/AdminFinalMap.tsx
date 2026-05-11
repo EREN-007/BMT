@@ -1,13 +1,20 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MapContainer, TileLayer, Polyline, Popup, Marker,
+  MapContainer, TileLayer, Polyline, Popup, Marker, useMap,
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getLang, ADMIN_T } from '@/lib/lang'
+import { useEffect } from 'react'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
+
+function InvalidateSize() {
+  const map = useMap()
+  useEffect(() => { map.invalidateSize() }, [map])
+  return null
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -275,8 +282,10 @@ function AdminFinalMap() {
       </aside>
 
       {/* ── Carte ── */}
-      <div className="mp-map-wrap" style={{ position:'relative' }}>
-        <MapContainer center={MONCTON_CENTER} zoom={13} className="mp-leaflet" zoomControl={false}>
+      <div className="mp-map-wrap" style={{ flex: 1, height: '100dvh', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+        <MapContainer center={MONCTON_CENTER} zoom={13} className="mp-leaflet" zoomControl={false}
+          style={{ width: '100%', height: '100%' }}>
+          <InvalidateSize />
           {/* Mapbox custom style — cohérent avec l'interface utilisateur */}
           <TileLayer
             url="https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ"

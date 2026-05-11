@@ -8,6 +8,7 @@ import {
   Rectangle,
   Popup,
   LayersControl,
+  useMap,
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -20,6 +21,12 @@ import {
 import { getLang, ADMIN_T } from '@/lib/lang'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
+
+function InvalidateSize() {
+  const map = useMap()
+  useEffect(() => { map.invalidateSize() }, [map])
+  return null
+}
 
 // ─── Density color logic ───────────────────────────────────────────────────────
 // count = nombre de citoyens ayant tracé ce corridor / placé cet arrêt
@@ -464,12 +471,14 @@ function AdminMapPage() {
       </aside>
 
       {/* ── Map ── */}
-      <div className="mp-map-wrap">
+      <div className="mp-map-wrap" style={{ flex: 1, height: '100dvh', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
         <MapContainer
           center={MONCTON_CENTER}
           zoom={13}
           className="mp-leaflet"
+          style={{ width: '100%', height: '100%' }}
         >
+          <InvalidateSize />
           <LayersControl position="topright">
             <LayersControl.BaseLayer checked name="Plan">
               <TileLayer

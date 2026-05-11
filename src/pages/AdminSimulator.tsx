@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MapContainer, TileLayer, Circle, Marker, Popup, Polyline, Rectangle, useMapEvents,
+  MapContainer, TileLayer, Circle, Marker, Popup, Polyline, Rectangle, useMapEvents, useMap,
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -17,6 +17,12 @@ import { getRoutes, ensureSeedData } from '@/lib/storage'
 import { getLang, ADMIN_T } from '@/lib/lang'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
+
+function InvalidateSize() {
+  const map = useMap()
+  useEffect(() => { map.invalidateSize() }, [map])
+  return null
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -823,11 +829,12 @@ function AdminSimulator() {
       </aside>
 
       {/* ── Map ── */}
-      <div className="mp-map-wrap">
+      <div className="mp-map-wrap" style={{ flex: 1, height: '100dvh', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
         <MapContainer
           center={MONCTON_CENTER} zoom={13} className="mp-leaflet"
-          style={{ cursor: addingStop ? 'crosshair' : undefined }}
+          style={{ width: '100%', height: '100%', cursor: addingStop ? 'crosshair' : undefined }}
         >
+          <InvalidateSize />
           <TileLayer
             url="https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ"
             attribution='&copy; <a href="https://mapbox.com">Mapbox</a>'
