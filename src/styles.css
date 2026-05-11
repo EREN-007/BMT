@@ -1673,6 +1673,20 @@ body {
   font-family: var(--font);
 }
 
+/* ── Map wrap (AdminMapPage / AdminSimulator / AdminFinalMap) ── */
+
+.mp-map-wrap {
+  flex: 1;
+  min-width: 0;
+  height: 100dvh;
+  position: relative;
+  overflow: hidden;
+}
+.mp-leaflet {
+  width: 100%;
+  height: 100%;
+}
+
 /* ── Sidebar ── */
 
 .db-sidebar {
