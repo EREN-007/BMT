@@ -7,7 +7,7 @@ import { saveRoutes, saveStops } from '@/lib/storage'
 import { getLang, MAP_T } from '@/lib/lang'
 
 // ─── Mapbox config ────────────────────────────────────────────────────────────
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ'
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
 const MAPBOX_STYLE = 'mapbox://styles/erenjager/cmnxylxae002401s4c7v68c3x'
 const MONCTON    = { longitude: -64.760, latitude: 46.075, zoom: 13, pitch: 45, bearing: -17 }
 

@@ -8,6 +8,9 @@ import 'leaflet/dist/leaflet.css'
 import { getLang, ADMIN_T } from '@/lib/lang'
 import { useEffect } from 'react'
 
+const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
+const MB_STYLE  = `https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=${MB_TOKEN}`
+
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
 function InvalidateSize() {
@@ -288,7 +291,7 @@ function AdminFinalMap() {
           <InvalidateSize />
           {/* Mapbox custom style — cohérent avec l'interface utilisateur */}
           <TileLayer
-            url="https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ"
+            url={MB_STYLE}
             attribution='&copy; <a href="https://mapbox.com">Mapbox</a>'
             tileSize={512}
             zoomOffset={-1}

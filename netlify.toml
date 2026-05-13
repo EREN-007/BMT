@@ -4,3 +4,15 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# Admin SPA — admin.html sert toutes ses routes hash
+[[redirects]]
+  from   = "/admin.html"
+  to     = "/admin.html"
+  status = 200
+
+# Fallback SPA — toute autre URL → user app
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
