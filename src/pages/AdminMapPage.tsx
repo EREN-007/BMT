@@ -5,6 +5,7 @@ import type { MapMouseEvent } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { aggregate, AggregationResult } from '@/lib/aggregation'
 import { getRoutes, getStops } from '@/lib/storage'
+import { supabase } from '@/lib/supabase'
 import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
 import {
   computeEquity, gapLevelColor, EquityResult, EQ_ZONES,
@@ -122,6 +123,31 @@ function AdminMapPage() {
   }, [])
 
   useEffect(() => { runAggregation() }, [runAggregation])
+
+  // ── Mise à jour live (Supabase Realtime) ─────────────────────────────────
+  // S'abonne aux INSERT sur `routes` et `stops` : dès qu'un citoyen soumet
+  // une nouvelle proposition (MapPage → saveSubmission), la carte mère se
+  // réagrège automatiquement, sans recharger la page. Un debounce coalesce
+  // les rafales d'événements (une soumission insère souvent plusieurs routes
+  // et arrêts d'un coup) en un seul refetch.
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefresh = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => { runAggregation() }, 500)
+    }
+
+    const channel = supabase
+      .channel('admin-map-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'routes' }, scheduleRefresh)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stops' }, scheduleRefresh)
+      .subscribe()
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      supabase.removeChannel(channel)
+    }
+  }, [runAggregation])
 
   // Corridors et arrêts : uniquement des données réellement soumises par les citoyens
   const livecorridors = result?.corridors ?? []
