@@ -4,9 +4,10 @@ import Map, { Source, Layer, Marker } from 'react-map-gl/mapbox'
 import type { MapRef, MapMouseEvent } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { saveRoutes, saveStops } from '@/lib/storage'
+import { getLang, MAP_T } from '@/lib/lang'
 
 // ─── Mapbox config ────────────────────────────────────────────────────────────
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiZXJlbmphZ2VyIiwiYSI6ImNtbnh4Z3h4dTA3aWoycXB5ZGpmZTgwcWsifQ.aI1zk7S4WdSE4baYf4FYfQ'
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
 const MAPBOX_STYLE = 'mapbox://styles/erenjager/cmnxylxae002401s4c7v68c3x'
 const MONCTON    = { longitude: -64.760, latitude: 46.075, zoom: 13, pitch: 45, bearing: -17 }
 
@@ -165,6 +166,9 @@ function ImmersiveStopModal({ position, type, routes, onConfirm, onCancel }: Imm
   const [label,     setLabel]     = useState('')
   const [mapCenter, setMapCenter] = useState<[number, number]>(position) // [lat, lng]
 
+  const lang = getLang()
+  const t    = MAP_T[lang]
+
   // Lignes avec géométrie suffisante pour le snap
   const activeRoutes = routes.filter(r => (r.snappedPoints ?? r.points).length >= 2)
   const hasRoutes    = activeRoutes.length > 0
@@ -175,11 +179,11 @@ function ImmersiveStopModal({ position, type, routes, onConfirm, onCancel }: Imm
     ? (nearestOnRoutes(mapCenter, activeRoutes) ?? mapCenter)
     : mapCenter
 
-  const typeFr      = type === 'busstop' ? 'Arrêt de bus' : 'Station / Gare'
-  const typeEn      = type === 'busstop' ? 'Bus stop'     : 'Station'
-  const placeholder = type === 'busstop' ? 'ex: Arrêt Main St.' : 'ex: Gare Moncton'
+  const typeLabel   = type === 'busstop' ? t.modalTypeBusstop  : t.modalTypeStation
+  const typeAlt     = type === 'busstop' ? t.modalTypeEnBusstop : t.modalTypeEnStation
+  const placeholder = type === 'busstop' ? t.modalPlaceholderBusstop : t.modalPlaceholderStation
 
-  const handleConfirm = () => onConfirm(label.trim() || typeFr, snappedPos)
+  const handleConfirm = () => onConfirm(label.trim() || typeLabel, snappedPos)
 
   return (
     <div className="mp-imm-root">
@@ -277,7 +281,7 @@ function ImmersiveStopModal({ position, type, routes, onConfirm, onCancel }: Imm
           </svg>
         </button>
         <div className="mp-imm-header-info">
-          <span className="mp-imm-type">{typeFr} / {typeEn}</span>
+          <span className="mp-imm-type">{typeLabel} / {typeAlt}</span>
           <span className="mp-imm-coords">
             {snappedPos[0].toFixed(5)}, {snappedPos[1].toFixed(5)}
           </span>
@@ -287,13 +291,7 @@ function ImmersiveStopModal({ position, type, routes, onConfirm, onCancel }: Imm
       {/* ── Panneau bas ── */}
       <div className="mp-imm-panel">
         <p className="mp-imm-hint">
-          {hasRoutes
-            ? (type === 'busstop'
-                ? "L'arrêt se colle sur votre ligne — déplacez la carte pour choisir l'emplacement exact"
-                : "La station se colle sur votre ligne — déplacez la carte pour choisir l'emplacement exact")
-            : (type === 'busstop'
-                ? "Déplacez la carte pour positionner l'arrêt avec précision"
-                : "Déplacez la carte pour positionner la station avec précision")}
+          {hasRoutes ? t.modalHintSnap(type) : t.modalHintFree(type)}
         </p>
         <input
           className="mp-imm-input"
@@ -305,13 +303,13 @@ function ImmersiveStopModal({ position, type, routes, onConfirm, onCancel }: Imm
         />
         <div className="mp-imm-actions">
           <button className="mp-imm-btn-cancel" onClick={onCancel}>
-            Annuler
+            {t.modalCancel}
           </button>
           <button className="mp-imm-btn-confirm" onClick={handleConfirm}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            Confirmer
+            {t.modalConfirm}
           </button>
         </div>
       </div>
@@ -324,6 +322,8 @@ function ImmersiveStopModal({ position, type, routes, onConfirm, onCancel }: Imm
 function MapPage() {
   const navigate  = useNavigate()
   const mapRef    = useRef<MapRef>(null)
+  const lang      = getLang()
+  const t         = MAP_T[lang]
 
   const [activeTool,  setActiveTool]  = useState<Tool>('pencil')
   const [activeColor, setActiveColor] = useState<RouteColor>('#3498db')
@@ -452,7 +452,7 @@ function MapPage() {
 
   // ── Réinitialiser le dessin ───────────────────────────────────────────────
   const handleReset = useCallback(() => {
-    if (!window.confirm('Effacer tous les tracés et recommencer à zéro ?')) return
+    if (!window.confirm(t.confirmReset)) return
     // Annuler tout snap en attente avant de vider l'état
     if (snapTimerRef.current) { clearTimeout(snapTimerRef.current); snapTimerRef.current = null }
     clearMapDraft()
@@ -610,17 +610,16 @@ function MapPage() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
           </svg>
-          Brouillon restauré — {routes.length} ligne{routes.length !== 1 ? 's' : ''}
-          {stops.length > 0 && `, ${stops.length} arrêt${stops.length !== 1 ? 's' : ''}`}
+          {t.draftRestored(routes.length, stops.length)}
         </div>
       )}
 
       {/* ── Hint de dessin ── */}
       {activeTool === 'pencil' && !isDrawing && menuOpen && (
-        <div className="mp-hint">Appuyez sur la carte pour commencer une ligne</div>
+        <div className="mp-hint">{t.hintStart}</div>
       )}
       {activeTool === 'pencil' && isDrawing && (
-        <div className="mp-hint mp-hint-drawing">Appuyez pour ajouter des points</div>
+        <div className="mp-hint mp-hint-drawing">{t.hintDraw}</div>
       )}
 
       {/* ── Toolbar flottant ── */}
@@ -634,7 +633,7 @@ function MapPage() {
             <button
               className={`mp-ft-btn ${activeTool === 'pencil' ? 'mp-ft-active' : ''}`}
               onClick={() => handleToolChange('pencil')}
-              title="Tracer une ligne"
+              title={t.titleDraw}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
@@ -654,7 +653,7 @@ function MapPage() {
             </div>
 
             {isDrawing && (
-              <button className="mp-ft-btn mp-ft-finish" onClick={finishRoute} title="Terminer">
+              <button className="mp-ft-btn mp-ft-finish" onClick={finishRoute} title={t.titleFinish}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
@@ -667,7 +666,7 @@ function MapPage() {
             <button
               className={`mp-ft-btn ${activeTool === 'eraser' ? 'mp-ft-active' : ''}`}
               onClick={() => handleToolChange('eraser')}
-              title="Effacer"
+              title={t.titleErase}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <path d="M20 20H7L3 16l10-10 7 7-1.5 1.5"/>
@@ -678,7 +677,7 @@ function MapPage() {
             <button
               className={`mp-ft-btn ${activeTool === 'busstop' ? 'mp-ft-active' : ''}`}
               onClick={() => handleToolChange('busstop')}
-              title="Arrêt de bus"
+              title={t.titleBusstop}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <rect x="3" y="3" width="18" height="12" rx="2"/>
@@ -691,7 +690,7 @@ function MapPage() {
             <button
               className={`mp-ft-btn ${activeTool === 'station' ? 'mp-ft-active' : ''}`}
               onClick={() => handleToolChange('station')}
-              title="Station"
+              title={t.titleStation}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <path d="M3 21h18M5 21V7l7-4 7 4v14"/>
@@ -704,7 +703,7 @@ function MapPage() {
             <button
               className="mp-ft-btn mp-ft-reset"
               onClick={handleReset}
-              title="Réinitialiser le dessin"
+              title={t.titleReset}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <polyline points="1 4 1 10 7 10"/>
@@ -715,7 +714,7 @@ function MapPage() {
             <button
               className="mp-ft-btn mp-ft-results"
               onClick={() => navigate('/results')}
-              title="Carte citoyenne"
+              title={t.titleResults}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
@@ -731,27 +730,27 @@ function MapPage() {
           <button
             className={`mp-ft-burger ${menuOpen ? 'mp-ft-burger-open' : ''}`}
             onClick={() => setMenuOpen(o => !o)}
-            title="Outils"
+            title={t.titleTools}
           >
             <span /><span /><span />
           </button>
 
           {/* Outil actif — badge contextuel */}
           <div className="mp-ft-active-badge">
-            {activeTool === 'pencil'  && <span style={{ color: activeColor }}>● Tracer</span>}
-            {activeTool === 'eraser'  && <span>✕ Gomme</span>}
-            {activeTool === 'busstop' && <span>🚏 Arrêt</span>}
-            {activeTool === 'station' && <span>🏢 Station</span>}
+            {activeTool === 'pencil'  && <span style={{ color: activeColor }}>{t.toolDraw}</span>}
+            {activeTool === 'eraser'  && <span>{t.toolEraser}</span>}
+            {activeTool === 'busstop' && <span>{t.toolBusstop}</span>}
+            {activeTool === 'station' && <span>{t.toolStation}</span>}
           </div>
 
           <div className="mp-ft-stats">
-            {finishedCount > 0 && <span><strong>{finishedCount}</strong> ligne{finishedCount !== 1 ? 's' : ''}</span>}
-            {stopCount     > 0 && <span><strong>{stopCount}</strong> arrêt{stopCount !== 1 ? 's' : ''}</span>}
-            {stationCount  > 0 && <span><strong>{stationCount}</strong> station{stationCount !== 1 ? 's' : ''}</span>}
+            {finishedCount > 0 && <span>{t.statLine(finishedCount)}</span>}
+            {stopCount     > 0 && <span>{t.statStop(stopCount)}</span>}
+            {stationCount  > 0 && <span>{t.statStation(stationCount)}</span>}
           </div>
 
           <button className="mp-ft-next" onClick={handleNext}>
-            Suivant
+            {t.next}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="9 18 15 12 9 6"/>
             </svg>

@@ -2,3 +2,7 @@ node_modules/
 dist/
 .DS_Store
 *.local
+
+# Capacitor native projects (générés localement, pas commités)
+ios/
+android/

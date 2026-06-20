@@ -1,12 +1,23 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MapContainer, TileLayer, Polyline, Popup, Marker,
+  MapContainer, TileLayer, Polyline, Popup, Marker, useMap,
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { getLang, ADMIN_T } from '@/lib/lang'
+import { useEffect } from 'react'
+
+const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
+const MB_STYLE  = `https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=${MB_TOKEN}`
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
+
+function InvalidateSize() {
+  const map = useMap()
+  useEffect(() => { map.invalidateSize() }, [map])
+  return null
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -211,6 +222,8 @@ function MapLegend({ routes }: { routes: FinalRoute[] }) {
 
 function AdminFinalMap() {
   const navigate = useNavigate()
+  const lang     = getLang()
+  const t        = ADMIN_T[lang]
   const [submitted, setSubmitted]       = useState(false)
   const [showBoundaries, setShowBound]  = useState(true)
 
@@ -272,13 +285,16 @@ function AdminFinalMap() {
       </aside>
 
       {/* ── Carte ── */}
-      <div className="mp-map-wrap" style={{ position:'relative' }}>
-        <MapContainer center={MONCTON_CENTER} zoom={13} className="mp-leaflet" zoomControl={false}>
-          {/* CartoDB Positron — fond professionnel épuré */}
+      <div className="mp-map-wrap" style={{ flex: 1, height: '100dvh', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+        <MapContainer center={MONCTON_CENTER} zoom={13} className="mp-leaflet" zoomControl={false}
+          style={{ width: '100%', height: '100%' }}>
+          <InvalidateSize />
+          {/* Mapbox custom style — cohérent avec l'interface utilisateur */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            maxZoom={20}
+            url={MB_STYLE}
+            attribution='&copy; <a href="https://mapbox.com">Mapbox</a>'
+            tileSize={512}
+            zoomOffset={-1}
           />
 
           {/* Limites municipales */}
@@ -305,10 +321,10 @@ function AdminFinalMap() {
                     <table style={{ fontSize:'0.8rem', width:'100%', borderCollapse:'collapse' }}>
                       <tbody>
                         {[
-                          ['Type',         r.type],
-                          ['Fréquence',    r.frequency],
-                          ['Achalandage',  `${r.ridership.toLocaleString()} pass./j`],
-                          ['Arrêts',       r.stops.length.toString()],
+                          [t.finalPType,   r.type],
+                          [t.finalPFreq,   r.frequency],
+                          [t.finalPRide,   `${r.ridership.toLocaleString()} pass./j`],
+                          [t.finalPStops,  r.stops.length.toString()],
                         ].map(([k,v]) => (
                           <tr key={k}>
                             <td style={{ color:'#888', paddingRight:10, paddingBottom:3 }}>{k}</td>
@@ -352,7 +368,7 @@ function AdminFinalMap() {
                     )}
                     <br/><span style={{ color:'#888', fontSize:'0.78rem' }}>{s.labelEN}</span><br/>
                     <span style={{ fontSize:'0.8rem', display:'block', marginTop:5 }}>
-                      Lignes {s.routes.join(', ')}{s.accessible ? '  ♿' : '  —'}
+                      {t.finalPLines} {s.routes.join(', ')}{s.accessible ? '  ♿' : '  —'}
                     </span>
                   </div>
                 </Popup>
@@ -378,8 +394,8 @@ function AdminFinalMap() {
             <line x1="16" y1="13" x2="8" y2="13"/>
           </svg>
           <div>
-            <h2 className="sim-title">Carte Finale</h2>
-            <p className="sim-subtitle">Conforme N.-B. — Prête à adopter</p>
+            <h2 className="sim-title">{t.finalTitle}</h2>
+            <p className="sim-subtitle">{t.finalSub}</p>
           </div>
         </div>
 
@@ -387,19 +403,19 @@ function AdminFinalMap() {
 
           {/* KPIs */}
           <div className="fm-kpi-row">
-            <div className="fm-kpi"><span>{routes.length}</span>lignes</div>
-            <div className="fm-kpi"><span>{FINAL_STOPS.length}</span>arrêts</div>
-            <div className="fm-kpi"><span>{(totalRidership/1000).toFixed(1)}k</span>pass./j</div>
+            <div className="fm-kpi"><span>{routes.length}</span>{t.finalLines}</div>
+            <div className="fm-kpi"><span>{FINAL_STOPS.length}</span>{t.finalStops}</div>
+            <div className="fm-kpi"><span>{(totalRidership/1000).toFixed(1)}k</span>{t.finalPass}</div>
           </div>
 
           {/* Lignes officielles */}
-          <p className="sim-section-title" style={{ marginTop:14 }}>Lignes officielles</p>
+          <p className="sim-section-title" style={{ marginTop:14 }}>{t.finalOfficial}</p>
           <div className="fm-route-list">
             {routes.map(r => (
               <div key={r.id} className="fm-route-card">
                 <div className="fm-route-badge" style={{ background:r.color }}>{r.number}</div>
                 <div className="fm-route-info">
-                  <div className="fm-route-label">{r.labelFR.split('—')[1]?.trim()}</div>
+                  <div className="fm-route-label">{t.finalRouteLabel(r)}</div>
                   <div className="fm-route-meta">
                     <span>{r.type}</span>
                     <span>{r.frequency}</span>
@@ -411,7 +427,7 @@ function AdminFinalMap() {
           </div>
 
           {/* Conformité N.-B. */}
-          <p className="sim-section-title" style={{ marginTop:14 }}>Conformité N.-B.</p>
+          <p className="sim-section-title" style={{ marginTop:14 }}>{t.finalCompl}</p>
           <div className="fm-standards-list">
             {NB_STANDARDS.map(s => (
               <div key={s.id} className="fm-standard-row">
@@ -426,7 +442,7 @@ function AdminFinalMap() {
 
           {/* Options */}
           <label className="sim-toggle-row" style={{ marginTop:12 }}>
-            <span style={{ fontSize:'0.78rem' }}>Limites municipales</span>
+            <span style={{ fontSize:'0.78rem' }}>{t.finalBounds}</span>
             <button className={`sim-toggle ${showBoundaries ? 'sim-toggle-on' : ''}`}
               onClick={() => setShowBound(v => !v)}>
               {showBoundaries ? 'ON' : 'OFF'}
@@ -435,13 +451,7 @@ function AdminFinalMap() {
 
           {/* Bloc révision */}
           <div className="fm-revision-block">
-            {[
-              ['Document',  'BMT-CARTE-001'],
-              ['Révision',  '1.0'],
-              ['Date',      'Avr. 2026'],
-              ['Autorité',  'Codiac Transpo'],
-              ['Statut',    'Approuvé — BMT/CME'],
-            ].map(([k,v]) => (
+            {t.finalRevision.map(([k,v]) => (
               <div key={k} className="fm-revision-row">
                 <span>{k}</span><strong>{v}</strong>
               </div>
@@ -453,7 +463,7 @@ function AdminFinalMap() {
         {/* Boutons bas */}
         <div className="sim-actions">
           <button className="sim-btn sim-btn-add" onClick={() => window.print()}>
-            🖨 Imprimer / PDF
+            {t.finalPrint}
           </button>
           <button
             className="sim-btn"
@@ -465,7 +475,7 @@ function AdminFinalMap() {
             }}
             onClick={() => setSubmitted(true)}
           >
-            {submitted ? '✓ Soumis à la Ville' : '⬆ Soumettre à la Ville'}
+            {submitted ? t.finalSubmitted : t.finalSubmit}
           </button>
         </div>
 

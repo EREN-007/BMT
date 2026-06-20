@@ -1,24 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  MapContainer,
-  TileLayer,
-  Polyline,
-  CircleMarker,
-  Rectangle,
-  Popup,
-  LayersControl,
-} from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import MapGL, { Source, Layer, Marker, Popup } from 'react-map-gl/mapbox'
+import type { MapMouseEvent } from 'react-map-gl/mapbox'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import { aggregate, AggregationResult } from '@/lib/aggregation'
 import { getRoutes, getStops, ensureSeedData } from '@/lib/storage'
 import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
 import {
-  computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
+  computeEquity, gapLevelColor, EquityResult, EQ_ZONES,
 } from '@/lib/equity'
+import { getLang, ADMIN_T } from '@/lib/lang'
 
-delete (L.Icon.Default.prototype as any)._getIconUrl
+// ─── Mapbox config — même carte/style que le côté utilisateur (MapPage) ───────
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
+const MAPBOX_STYLE  = 'mapbox://styles/erenjager/cmnxylxae002401s4c7v68c3x'
+const MONCTON_VIEW  = { longitude: -64.760, latitude: 46.075, zoom: 12.6, pitch: 0, bearing: 0 }
+
+// [lat,lng] → [lng,lat] (storage vs Mapbox convention)
+const toLngLat = ([lat, lng]: [number, number]): [number, number] => [lng, lat]
 
 // ─── Density color logic ───────────────────────────────────────────────────────
 // count = nombre de citoyens ayant tracé ce corridor / placé cet arrêt
@@ -151,12 +150,6 @@ const STATIONS = [
   { id: 'st5', label: 'Station Moncton Ouest',          pos: [46.0790, -64.8130] as [number,number], count: 6  },
 ]
 
-const MAX_ROUTE = Math.max(...CORRIDORS.map(c => c.count))
-const MAX_STOP  = Math.max(...BUS_STOPS.map(s => s.count))
-const MAX_STA   = Math.max(...STATIONS.map(s => s.count))
-
-const MONCTON_CENTER: [number, number] = [46.075, -64.760]
-
 // Zones d'équité : définies dans src/lib/equity/data.ts (EQ_ZONES)
 // Couleurs et labels : gapLevelColor / gapLevelLabel depuis src/lib/equity/index.ts
 
@@ -199,8 +192,9 @@ function odOpacity(count: number): number {
 // ─── Density badge ─────────────────────────────────────────────────────────────
 
 function DensityBadge({ count, max }: { count: number; max: number }) {
+  const t     = ADMIN_T[getLang()]
   const color = densityColor(count, max)
-  const label = count / max >= 0.65 ? 'Très demandé' : count / max >= 0.30 ? 'Demandé' : 'Peu demandé'
+  const label = count / max >= 0.65 ? t.denHigh : count / max >= 0.30 ? t.denMed : t.denLow
   return (
     <span style={{
       display: 'inline-block', padding: '1px 8px', borderRadius: 10,
@@ -212,15 +206,35 @@ function DensityBadge({ count, max }: { count: number; max: number }) {
   )
 }
 
+// ─── Types popup ────────────────────────────────────────────────────────────────
+
+type PopupInfo =
+  | { kind: 'corridor'; lng: number; lat: number; label: string; count: number }
+  | { kind: 'stop';     lng: number; lat: number; label: string; count: number }
+  | { kind: 'station';  lng: number; lat: number; label: string; count: number }
+  | { kind: 'equity';   lng: number; lat: number; name: string; color: string
+      hasScore: boolean; gapLevel: string; needScore: number; serviceScore: number
+      gap: number; pop: number; income: number; seniors: number }
+  | { kind: 'od';       lng: number; lat: number; fromName: string; toName: string
+      trips: number; rawCount: number; covered: boolean; isFallback: boolean }
+
+const CORRIDOR_LAYER = 'admin-corridors-line'
+const EQUITY_LAYER   = 'admin-equity-fill'
+const OD_LAYER_SOLID = 'admin-od-line-solid'
+const OD_LAYER_DASH  = 'admin-od-line-dash'
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function AdminMapPage() {
   const navigate = useNavigate()
+  const lang     = getLang()
+  const t        = ADMIN_T[lang]
   const [showRoutes,   setShowRoutes]   = useState(true)
   const [showStops,    setShowStops]    = useState(true)
   const [showStations, setShowStations] = useState(true)
   const [showEquity,   setShowEquity]   = useState(false)
   const [showOD,       setShowOD]       = useState(false)
+  const [popupInfo,    setPopupInfo]    = useState<PopupInfo | null>(null)
 
   // ── Agrégation live ──────────────────────────────────────────────────────
   const [result,     setResult]     = useState<AggregationResult | null>(null)
@@ -273,6 +287,122 @@ function AdminMapPage() {
   const MAX_STOP_LIVE  = Math.max(...liveStops.map(s => s.count), 1)
   const MAX_STA_LIVE   = Math.max(...liveStations.map(s => s.count), 1)
 
+  // ── GeoJSON : corridors ──────────────────────────────────────────────────
+  const corridorFC = useMemo<GeoJSON.FeatureCollection>(() => ({
+    type: 'FeatureCollection',
+    features: livecorridors.map(c => ({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: c.points.map(toLngLat) },
+      properties: {
+        id: c.id, label: c.label, count: c.count,
+        color: densityColor(c.count, MAX_ROUTE_LIVE),
+        width: densityWeight(c.count, MAX_ROUTE_LIVE),
+      },
+    })),
+  }), [livecorridors, MAX_ROUTE_LIVE])
+
+  // ── GeoJSON : zones d'équité ─────────────────────────────────────────────
+  const equityFC = useMemo<GeoJSON.FeatureCollection>(() => ({
+    type: 'FeatureCollection',
+    features: EQ_ZONES.map(z => {
+      const score = equityResult?.scores.find(s => s.zone.id === z.id)
+      const color = score ? gapLevelColor(score.gapLevel) : '#888888'
+      const [sw, ne] = z.bounds
+      const ring = [
+        [sw[1], sw[0]], [sw[1], ne[0]], [ne[1], ne[0]], [ne[1], sw[0]], [sw[1], sw[0]],
+      ]
+      return {
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [ring] },
+        properties: {
+          id: z.id, name: z.name, color,
+          hasScore:     !!score,
+          gapLevel:     score?.gapLevel ?? '',
+          needScore:    score?.needScore ?? 0,
+          serviceScore: score?.serviceScore ?? 0,
+          gap:          score?.gap ?? 0,
+          pop: z.pop, income: z.income, seniors: z.seniors,
+        },
+      }
+    }),
+  }), [equityResult])
+
+  // ── GeoJSON : flux O-D ───────────────────────────────────────────────────
+  const odFC = useMemo<GeoJSON.FeatureCollection>(() => {
+    if (odMatrix) {
+      const zoneMap  = new Map(odMatrix.zones.map(z => [z.id, z]))
+      const maxTrips = odMatrix.cells[0]?.trips ?? 1
+      const features: GeoJSON.Feature[] = []
+      for (const cell of odMatrix.cells) {
+        const fromZone = zoneMap.get(cell.fromZoneId)
+        const toZone   = zoneMap.get(cell.toZoneId)
+        if (!fromZone || !toZone) continue
+        const ratio = cell.trips / maxTrips
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [toLngLat(fromZone.center), toLngLat(toZone.center)],
+          },
+          properties: {
+            fromName: fromZone.name, toName: toZone.name,
+            trips: cell.trips, rawCount: cell.rawCount, covered: cell.covered,
+            color: cell.covered ? '#3498db' : '#e67e22',
+            width: Math.min(Math.round(1 + ratio * 7), 8),
+            opacity: 0.25 + ratio * 0.65,
+            isFallback: false,
+          },
+        })
+      }
+      return { type: 'FeatureCollection', features }
+    }
+    // Fallback statique (avant chargement)
+    return {
+      type: 'FeatureCollection',
+      features: OD_FLOWS.map(f => ({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [toLngLat(f.from), toLngLat(f.to)] },
+        properties: {
+          fromName: f.label, toName: '', trips: f.count, rawCount: f.count, covered: false,
+          color: '#3498db', width: odWeight(f.count), opacity: odOpacity(f.count),
+          isFallback: true,
+        },
+      })),
+    }
+  }, [odMatrix])
+
+  // ── Couches interactives actives (clic) ──────────────────────────────────
+  const interactiveLayerIds = [
+    showRoutes ? CORRIDOR_LAYER : null,
+    showEquity ? EQUITY_LAYER   : null,
+    showOD     ? OD_LAYER_SOLID : null,
+    showOD     ? OD_LAYER_DASH  : null,
+  ].filter((id): id is string => !!id)
+
+  const handleMapClick = useCallback((e: MapMouseEvent) => {
+    const feature = e.features?.[0]
+    if (!feature) { setPopupInfo(null); return }
+    const { lng, lat } = e.lngLat
+    const p = feature.properties as Record<string, any>
+    const layerId = feature.layer?.id
+
+    if (layerId === CORRIDOR_LAYER) {
+      setPopupInfo({ kind: 'corridor', lng, lat, label: p.label, count: p.count })
+    } else if (layerId === EQUITY_LAYER) {
+      setPopupInfo({
+        kind: 'equity', lng, lat, name: p.name, color: p.color,
+        hasScore: p.hasScore, gapLevel: p.gapLevel,
+        needScore: p.needScore, serviceScore: p.serviceScore, gap: p.gap,
+        pop: p.pop, income: p.income, seniors: p.seniors,
+      })
+    } else if (layerId === OD_LAYER_SOLID || layerId === OD_LAYER_DASH) {
+      setPopupInfo({
+        kind: 'od', lng, lat, fromName: p.fromName, toName: p.toName,
+        trips: p.trips, rawCount: p.rawCount, covered: p.covered, isFallback: p.isFallback,
+      })
+    }
+  }, [])
+
   return (
     <div className="db-root">
 
@@ -291,7 +421,7 @@ function AdminMapPage() {
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
-            Dashboard
+            {t.navDash}
           </a>
           <a className="db-nav-item db-nav-active">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -299,13 +429,13 @@ function AdminMapPage() {
               <line x1="8" y1="2" x2="8" y2="18"/>
               <line x1="16" y1="6" x2="16" y2="22"/>
             </svg>
-            Carte mère
+            {t.navMap}
           </a>
           <a className="db-nav-item" style={{cursor:'pointer'}} onClick={() => navigate('/simulateur')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Simulateur
+            {t.navSim}
           </a>
           <a className="db-nav-item" style={{cursor:'pointer'}} onClick={() => navigate('/carte-finale')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -313,129 +443,126 @@ function AdminMapPage() {
               <polyline points="14 2 14 8 20 8"/>
               <line x1="16" y1="13" x2="8" y2="13"/>
             </svg>
-            Carte finale
+            {t.navFinal}
           </a>
         </nav>
 
         {/* Légende heatmap */}
         <div className="adm-legend">
-          <p className="adm-legend-title">Intensité de demande</p>
+          <p className="adm-legend-title">{t.legendTitle}</p>
 
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#e74c3c' }} />
-              <span className="adm-heat-label">Très demandé</span>
+              <span className="adm-heat-label">{t.legHigh}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#f39c12' }} />
-              <span className="adm-heat-label">Demandé</span>
+              <span className="adm-heat-label">{t.legMed}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#ecf0f1', border: '1px solid rgba(255,255,255,0.2)' }} />
-              <span className="adm-heat-label">Peu demandé</span>
+              <span className="adm-heat-label">{t.legLow}</span>
             </div>
           </div>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Afficher</p>
+          <p className="adm-legend-title">{t.legShow}</p>
 
           <label className="adm-legend-item">
             <input type="checkbox" checked={showRoutes}   onChange={e => setShowRoutes(e.target.checked)} />
-            <span className="adm-legend-name">Lignes ({livecorridors.length})</span>
+            <span className="adm-legend-name">{t.legLines(livecorridors.length)}</span>
           </label>
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStops}    onChange={e => setShowStops(e.target.checked)} />
-            <span className="adm-legend-name">Arrêts ({liveStops.length})</span>
+            <span className="adm-legend-name">{t.legStops(liveStops.length)}</span>
           </label>
           <label className="adm-legend-item">
             <input type="checkbox" checked={showStations} onChange={e => setShowStations(e.target.checked)} />
-            <span className="adm-legend-name">Stations ({liveStations.length})</span>
+            <span className="adm-legend-name">{t.legStations(liveStations.length)}</span>
           </label>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Analyse d'équité</p>
+          <p className="adm-legend-title">{t.legEquity}</p>
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#e74c3c' }} />
-              <span className="adm-heat-label">Critique (écart ≥ 20)</span>
+              <span className="adm-heat-label">{t.eqCritical}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#f39c12' }} />
-              <span className="adm-heat-label">Modéré (écart ≥ 10)</span>
+              <span className="adm-heat-label">{t.eqModerate}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#f1c40f' }} />
-              <span className="adm-heat-label">Adéquat</span>
+              <span className="adm-heat-label">{t.eqAdequate}</span>
             </div>
             <div className="adm-heat-row">
               <span className="adm-heat-dot" style={{ background: '#2ecc71' }} />
-              <span className="adm-heat-label">Surplus de service</span>
+              <span className="adm-heat-label">{t.eqSurplus}</span>
             </div>
           </div>
           {equityResult && (
             <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', margin: '4px 0 6px' }}>
-              Écart pondéré : {equityResult.weightedGap > 0 ? '+' : ''}{equityResult.weightedGap} pts
+              {t.eqGapVal(equityResult.weightedGap)}
               {equityResult.criticalZones.length > 0 && (
-                <span style={{ color: '#e74c3c' }}> · {equityResult.criticalZones.length} critique{equityResult.criticalZones.length > 1 ? 's' : ''}</span>
+                <span style={{ color: '#e74c3c' }}> · {t.eqCritN(equityResult.criticalZones.length)}</span>
               )}
             </div>
           )}
           <label className="adm-legend-item">
             <input type="checkbox" checked={showEquity} onChange={e => setShowEquity(e.target.checked)} />
-            <span className="adm-legend-name">Zones d'équité ({EQ_ZONES.length})</span>
+            <span className="adm-legend-name">{t.legEquityZones(EQ_ZONES.length)}</span>
           </label>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Matrice O-D</p>
+          <p className="adm-legend-title">{t.legOD}</p>
           <div className="adm-heatmap-legend">
             <div className="adm-heat-row">
               <span style={{ display:'inline-block', width:24, height:3, background:'#3498db', opacity:0.9, marginRight:8, borderRadius:2 }} />
-              <span className="adm-heat-label">Desservi</span>
+              <span className="adm-heat-label">{t.odServed}</span>
             </div>
             <div className="adm-heat-row">
               <span style={{ display:'inline-block', width:24, height:2, background:'#e67e22', opacity:0.8, marginRight:8, borderRadius:2, borderTop:'1px dashed #e67e22' }} />
-              <span className="adm-heat-label">Non desservi</span>
+              <span className="adm-heat-label">{t.odUnserved}</span>
             </div>
           </div>
           {odMatrix && (
             <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', margin: '4px 0 6px' }}>
-              {odMatrix.cells.length} corridors · {odMatrix.coveragePct}% couverture
-              {odMatrix.unmetDemand.length > 0 && (
-                <span style={{ color: '#e67e22' }}> · {odMatrix.unmetDemand.length} lacunes</span>
-              )}
+              {t.odInfo(odMatrix.cells.length, odMatrix.coveragePct, odMatrix.unmetDemand.length)}
             </div>
           )}
           <label className="adm-legend-item">
             <input type="checkbox" checked={showOD} onChange={e => setShowOD(e.target.checked)} />
             <span className="adm-legend-name">
-              Lignes de désir ({odMatrix ? odMatrix.cells.length : OD_FLOWS.length})
+              {t.legODLabel(odMatrix ? odMatrix.cells.length : OD_FLOWS.length)}
             </span>
           </label>
 
           <div className="adm-legend-sep" />
-          <p className="adm-legend-title">Données</p>
+          <p className="adm-legend-title">{t.legData}</p>
           <div className="adm-stats-mini">
             <div className="adm-stat-mini">
               <span>{result ? result.totalRoutes : CORRIDORS.reduce((a,c) => a + c.count, 0)}</span>
-              tracés citoyens
+              {t.datCitizen}
             </div>
             <div className="adm-stat-mini">
               <span>{result ? result.stops.filter(s => s.type === 'busstop').length : BUS_STOPS.length}</span>
-              clusters arrêts
+              {t.datStopClus}
             </div>
             <div className="adm-stat-mini">
               <span>{result ? result.stops.filter(s => s.type === 'station').length : STATIONS.length}</span>
-              clusters stations
+              {t.datStaClus}
             </div>
           </div>
 
           {result && (
             <div style={{ padding: '8px 0 4px', fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>
               <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                {livecorridors.length} corridors · {result.gridStats.activeCells} cellules actives
+                {t.datCorridors(livecorridors.length, result.gridStats.activeCells)}
               </span>
               <br />
-              Mis à jour {new Date(lastUpdate).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+              {t.datUpdated(new Date(lastUpdate).toLocaleTimeString(t.dateLocale, { hour: '2-digit', minute: '2-digit' }))}
             </div>
           )}
 
@@ -448,7 +575,7 @@ function AdminMapPage() {
               fontWeight: 700, cursor: 'pointer', letterSpacing: '0.3px',
             }}
           >
-            ↺ Rafraîchir les données
+            {t.btnRefresh}
           </button>
         </div>
 
@@ -458,233 +585,247 @@ function AdminMapPage() {
             <polyline points="16 17 21 12 16 7"/>
             <line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
-          Déconnexion
+          {t.navLogout}
         </button>
       </aside>
 
       {/* ── Map ── */}
-      <div className="mp-map-wrap">
-        <MapContainer
-          center={MONCTON_CENTER}
-          zoom={13}
-          className="mp-leaflet"
+      <div className="mp-map-wrap" style={{ flex: 1, height: '100dvh', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+        <MapGL
+          mapboxAccessToken={MAPBOX_TOKEN}
+          mapStyle={MAPBOX_STYLE}
+          initialViewState={MONCTON_VIEW}
+          style={{ width: '100%', height: '100%' }}
+          onClick={handleMapClick}
+          interactiveLayerIds={interactiveLayerIds}
+          attributionControl={false}
+          logoPosition="bottom-right"
         >
-          <LayersControl position="topright">
-            <LayersControl.BaseLayer checked name="Plan">
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                maxZoom={20}
-              />
-            </LayersControl.BaseLayer>
-            <LayersControl.BaseLayer name="Satellite">
-              <TileLayer
-                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                attribution="Tiles © Esri"
-                maxZoom={20}
-              />
-            </LayersControl.BaseLayer>
-          </LayersControl>
-
           {/* Corridors / lignes — données agrégées */}
-          {showRoutes && livecorridors.map(c => (
-            <Polyline
-              key={c.id}
-              positions={c.points}
-              pathOptions={{
-                color:    densityColor(c.count, MAX_ROUTE_LIVE),
-                weight:   densityWeight(c.count, MAX_ROUTE_LIVE),
-                opacity:  0.85,
-                lineCap:  'round',
-                lineJoin: 'round',
-              }}
-            >
-              <Popup>
-                <div style={{ minWidth: 190 }}>
-                  <strong>{c.label}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {c.count} citoyen{c.count > 1 ? 's' : ''} ont tracé ce corridor
-                  </span><br /><br />
-                  <DensityBadge count={c.count} max={MAX_ROUTE_LIVE} />
-                </div>
-              </Popup>
-            </Polyline>
-          ))}
+          {showRoutes && (
+            <Source id="admin-corridors" type="geojson" data={corridorFC}>
+              <Layer
+                id={CORRIDOR_LAYER}
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color':   ['get', 'color'],
+                  'line-width':   ['get', 'width'],
+                  'line-opacity': 0.85,
+                }}
+              />
+            </Source>
+          )}
+
+          {/* Zones d'équité — couleurs et scores calculés dynamiquement */}
+          {showEquity && (
+            <Source id="admin-equity" type="geojson" data={equityFC}>
+              <Layer
+                id={EQUITY_LAYER}
+                type="fill"
+                paint={{ 'fill-color': ['get', 'color'], 'fill-opacity': 0.18 }}
+              />
+              <Layer
+                id="admin-equity-line"
+                type="line"
+                paint={{ 'line-color': ['get', 'color'], 'line-width': 2, 'line-dasharray': [6, 4] }}
+              />
+            </Source>
+          )}
+
+          {/* Lignes de désir O-D — données calculées depuis les tracés citoyens */}
+          {showOD && (
+            <Source id="admin-od" type="geojson" data={odFC}>
+              <Layer
+                id={OD_LAYER_SOLID}
+                type="line"
+                filter={['==', ['get', 'covered'], true]}
+                layout={{ 'line-cap': 'round' }}
+                paint={{
+                  'line-color':   ['get', 'color'],
+                  'line-width':   ['get', 'width'],
+                  'line-opacity': ['get', 'opacity'],
+                }}
+              />
+              <Layer
+                id={OD_LAYER_DASH}
+                type="line"
+                filter={['!=', ['get', 'covered'], true]}
+                layout={{ 'line-cap': 'round' }}
+                paint={{
+                  'line-color':    ['get', 'color'],
+                  'line-width':    ['get', 'width'],
+                  'line-opacity':  ['get', 'opacity'],
+                  'line-dasharray': [8, 5],
+                }}
+              />
+            </Source>
+          )}
 
           {/* Arrêts de bus — données agrégées */}
           {showStops && liveStops.map(s => (
-            <CircleMarker
+            <Marker
               key={s.id}
-              center={s.pos}
-              radius={densityRadius(s.count, MAX_STOP_LIVE)}
-              pathOptions={{
-                color:       densityColor(s.count, MAX_STOP_LIVE),
-                fillColor:   densityColor(s.count, MAX_STOP_LIVE),
-                fillOpacity: 0.75,
-                weight: 2,
+              longitude={s.pos[1]}
+              latitude={s.pos[0]}
+              anchor="center"
+              onClick={(e) => {
+                e.originalEvent.stopPropagation()
+                setPopupInfo({ kind: 'stop', lng: s.pos[1], lat: s.pos[0], label: s.label, count: s.count })
               }}
             >
-              <Popup>
-                <div style={{ minWidth: 180 }}>
-                  <strong>🚏 {s.label}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {s.count} citoyen{s.count > 1 ? 's' : ''} ont voté pour cet arrêt
-                  </span><br /><br />
-                  <DensityBadge count={s.count} max={MAX_STOP_LIVE} />
-                </div>
-              </Popup>
-            </CircleMarker>
+              <div
+                title={s.label}
+                style={{
+                  width: densityRadius(s.count, MAX_STOP_LIVE) * 2,
+                  height: densityRadius(s.count, MAX_STOP_LIVE) * 2,
+                  borderRadius: '50%',
+                  background: densityColor(s.count, MAX_STOP_LIVE),
+                  opacity: 0.85,
+                  border: '2px solid rgba(255,255,255,0.7)',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+                  cursor: 'pointer',
+                }}
+              />
+            </Marker>
           ))}
-
-          {/* Zones d'équité — couleurs et scores calculés dynamiquement */}
-          {showEquity && EQ_ZONES.map(z => {
-            // Trouver le score calculé pour cette zone (fallback neutre si calcul en cours)
-            const score = equityResult?.scores.find(s => s.zone.id === z.id)
-            const color = score ? gapLevelColor(score.gapLevel) : '#888'
-            const label = score ? gapLevelLabel(score.gapLevel) : '—'
-            return (
-              <Rectangle
-                key={z.id}
-                bounds={z.bounds}
-                pathOptions={{
-                  color, fillColor: color,
-                  fillOpacity: 0.18, weight: 2, dashArray: '6 4',
-                }}
-              >
-                <Popup>
-                  <div style={{ minWidth: 220 }}>
-                    <strong>{z.name}</strong><br />
-                    <span style={{ color, fontWeight: 700, fontSize: '0.8rem' }}>{label}</span>
-                    {score && (
-                      <>
-                        <hr style={{ margin: '6px 0', borderColor: '#eee' }} />
-                        <table style={{ fontSize: '0.8rem', width: '100%' }}>
-                          <tbody>
-                            <tr>
-                              <td style={{ color: '#666' }}>Score besoin</td>
-                              <td><strong style={{ color: '#c0392b' }}>{score.needScore} / 100</strong></td>
-                            </tr>
-                            <tr>
-                              <td style={{ color: '#666' }}>Score service</td>
-                              <td><strong style={{ color }}>{score.serviceScore} / 100</strong></td>
-                            </tr>
-                            <tr>
-                              <td style={{ color: '#666' }}>Écart</td>
-                              <td><strong style={{ color }}>
-                                {score.gap > 0 ? '+' : ''}{score.gap} pts
-                              </strong></td>
-                            </tr>
-                            <tr><td colSpan={2}><hr style={{ margin: '4px 0', borderColor: '#eee' }} /></td></tr>
-                            <tr><td style={{ color: '#666' }}>Population</td><td><strong>{z.pop.toLocaleString()}</strong></td></tr>
-                            <tr><td style={{ color: '#666' }}>Revenu médian</td><td><strong>{z.income.toLocaleString()} $</strong></td></tr>
-                            <tr><td style={{ color: '#666' }}>% aînés (65+)</td><td><strong>{z.seniors} %</strong></td></tr>
-                          </tbody>
-                        </table>
-                      </>
-                    )}
-                  </div>
-                </Popup>
-              </Rectangle>
-            )
-          })}
-
-          {/* Lignes de désir O-D — données calculées depuis les tracés citoyens */}
-          {showOD && (() => {
-            if (odMatrix) {
-              const zoneMap   = new Map(odMatrix.zones.map(z => [z.id, z]))
-              const maxTrips  = odMatrix.cells[0]?.trips ?? 1
-              return odMatrix.cells.map(cell => {
-                const fromZone = zoneMap.get(cell.fromZoneId)
-                const toZone   = zoneMap.get(cell.toZoneId)
-                if (!fromZone || !toZone) return null
-                const ratio   = cell.trips / maxTrips
-                const weight  = Math.round(1 + ratio * 7)
-                const opacity = 0.25 + ratio * 0.65
-                return (
-                  <Polyline
-                    key={`od-${cell.fromZoneId}|${cell.toZoneId}`}
-                    positions={[fromZone.center, toZone.center]}
-                    pathOptions={{
-                      color:     cell.covered ? '#3498db' : '#e67e22',
-                      weight:    Math.min(weight, 8),
-                      opacity,
-                      dashArray: cell.covered ? undefined : '8 5',
-                    }}
-                  >
-                    <Popup>
-                      <div style={{ minWidth: 200 }}>
-                        <strong>{fromZone.name} → {toZone.name}</strong><br />
-                        <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                          {cell.trips.toLocaleString()} voy/j estimés · {cell.rawCount} tracé{cell.rawCount > 1 ? 's' : ''}
-                        </span><br />
-                        <span style={{
-                          display: 'inline-block', marginTop: 6, padding: '2px 8px',
-                          borderRadius: 8, fontSize: '0.75rem', fontWeight: 700,
-                          background: cell.covered ? '#3498db22' : '#e67e2222',
-                          color: cell.covered ? '#3498db' : '#e67e22',
-                          border: `1px solid ${cell.covered ? '#3498db55' : '#e67e2255'}`,
-                        }}>
-                          {cell.covered ? '✓ Desservi' : '⚠ Non desservi'}
-                        </span>
-                      </div>
-                    </Popup>
-                  </Polyline>
-                )
-              })
-            }
-
-            // Fallback statique (avant chargement)
-            return OD_FLOWS.map(f => (
-              <Polyline
-                key={f.id}
-                positions={[f.from, f.to]}
-                pathOptions={{
-                  color: '#3498db', weight: odWeight(f.count),
-                  opacity: odOpacity(f.count), dashArray: '8 5',
-                }}
-              >
-                <Popup>
-                  <div style={{ minWidth: 190 }}>
-                    <strong>{f.label}</strong><br />
-                    <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                      {f.count} déplacements enregistrés
-                    </span>
-                  </div>
-                </Popup>
-              </Polyline>
-            ))
-          })()}
 
           {/* Stations — données agrégées */}
           {showStations && liveStations.map(s => (
-            <CircleMarker
+            <Marker
               key={s.id}
-              center={s.pos}
-              radius={densityRadius(s.count, MAX_STA_LIVE) + 3}
-              pathOptions={{
-                color:       densityColor(s.count, MAX_STA_LIVE),
-                fillColor:   densityColor(s.count, MAX_STA_LIVE),
-                fillOpacity: 0.75,
-                weight:      3,
-                dashArray:   '4 3',
+              longitude={s.pos[1]}
+              latitude={s.pos[0]}
+              anchor="center"
+              onClick={(e) => {
+                e.originalEvent.stopPropagation()
+                setPopupInfo({ kind: 'station', lng: s.pos[1], lat: s.pos[0], label: s.label, count: s.count })
               }}
             >
-              <Popup>
-                <div style={{ minWidth: 180 }}>
-                  <strong>🏢 {s.label}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {s.count} citoyen{s.count > 1 ? 's' : ''} ont proposé cette station
-                  </span><br /><br />
-                  <DensityBadge count={s.count} max={MAX_STA_LIVE} />
-                </div>
-              </Popup>
-            </CircleMarker>
+              <div
+                title={s.label}
+                style={{
+                  width: (densityRadius(s.count, MAX_STA_LIVE) + 3) * 2,
+                  height: (densityRadius(s.count, MAX_STA_LIVE) + 3) * 2,
+                  borderRadius: '50%',
+                  background: densityColor(s.count, MAX_STA_LIVE),
+                  opacity: 0.85,
+                  border: '3px dashed rgba(255,255,255,0.8)',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+                  cursor: 'pointer',
+                }}
+              />
+            </Marker>
           ))}
-        </MapContainer>
+
+          {/* ── Popups ── */}
+          {popupInfo && (
+            <Popup
+              longitude={popupInfo.lng}
+              latitude={popupInfo.lat}
+              anchor="bottom"
+              closeOnClick={false}
+              onClose={() => setPopupInfo(null)}
+            >
+              {popupInfo.kind === 'corridor' && (
+                <div style={{ minWidth: 190 }}>
+                  <strong>{popupInfo.label}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {t.popCorridor(popupInfo.count)}
+                  </span><br /><br />
+                  <DensityBadge count={popupInfo.count} max={MAX_ROUTE_LIVE} />
+                </div>
+              )}
+
+              {popupInfo.kind === 'stop' && (
+                <div style={{ minWidth: 180 }}>
+                  <strong>🚏 {popupInfo.label}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {t.popStop(popupInfo.count)}
+                  </span><br /><br />
+                  <DensityBadge count={popupInfo.count} max={MAX_STOP_LIVE} />
+                </div>
+              )}
+
+              {popupInfo.kind === 'station' && (
+                <div style={{ minWidth: 180 }}>
+                  <strong>🏢 {popupInfo.label}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {t.popStation(popupInfo.count)}
+                  </span><br /><br />
+                  <DensityBadge count={popupInfo.count} max={MAX_STA_LIVE} />
+                </div>
+              )}
+
+              {popupInfo.kind === 'equity' && (
+                <div style={{ minWidth: 220 }}>
+                  <strong>{popupInfo.name}</strong><br />
+                  <span style={{ color: popupInfo.color, fontWeight: 700, fontSize: '0.8rem' }}>
+                    {popupInfo.hasScore ? t.eqLevel(popupInfo.gapLevel as any) : '—'}
+                  </span>
+                  {popupInfo.hasScore && (
+                    <>
+                      <hr style={{ margin: '6px 0', borderColor: '#eee' }} />
+                      <table style={{ fontSize: '0.8rem', width: '100%' }}>
+                        <tbody>
+                          <tr>
+                            <td style={{ color: '#666' }}>{t.popNeed}</td>
+                            <td><strong style={{ color: '#c0392b' }}>{popupInfo.needScore} / 100</strong></td>
+                          </tr>
+                          <tr>
+                            <td style={{ color: '#666' }}>{t.popService}</td>
+                            <td><strong style={{ color: popupInfo.color }}>{popupInfo.serviceScore} / 100</strong></td>
+                          </tr>
+                          <tr>
+                            <td style={{ color: '#666' }}>{t.popGap}</td>
+                            <td><strong style={{ color: popupInfo.color }}>
+                              {popupInfo.gap > 0 ? '+' : ''}{popupInfo.gap} pts
+                            </strong></td>
+                          </tr>
+                          <tr><td colSpan={2}><hr style={{ margin: '4px 0', borderColor: '#eee' }} /></td></tr>
+                          <tr><td style={{ color: '#666' }}>{t.popPop}</td><td><strong>{popupInfo.pop.toLocaleString()}</strong></td></tr>
+                          <tr><td style={{ color: '#666' }}>{t.popIncome}</td><td><strong>{popupInfo.income.toLocaleString()} $</strong></td></tr>
+                          <tr><td style={{ color: '#666' }}>{t.popSeniors}</td><td><strong>{popupInfo.seniors} %</strong></td></tr>
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {popupInfo.kind === 'od' && popupInfo.isFallback && (
+                <div style={{ minWidth: 190 }}>
+                  <strong>{popupInfo.fromName}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {t.popODFb(popupInfo.trips)}
+                  </span>
+                </div>
+              )}
+
+              {popupInfo.kind === 'od' && !popupInfo.isFallback && (
+                <div style={{ minWidth: 200 }}>
+                  <strong>{popupInfo.fromName} → {popupInfo.toName}</strong><br />
+                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
+                    {t.popTrips(popupInfo.trips, popupInfo.rawCount)}
+                  </span><br />
+                  <span style={{
+                    display: 'inline-block', marginTop: 6, padding: '2px 8px',
+                    borderRadius: 8, fontSize: '0.75rem', fontWeight: 700,
+                    background: popupInfo.covered ? '#3498db22' : '#e67e2222',
+                    color: popupInfo.covered ? '#3498db' : '#e67e22',
+                    border: `1px solid ${popupInfo.covered ? '#3498db55' : '#e67e2255'}`,
+                  }}>
+                    {popupInfo.covered ? t.popServed : t.popUnserved}
+                  </span>
+                </div>
+              )}
+            </Popup>
+          )}
+        </MapGL>
 
         {/* Titre flottant */}
         <div className="adm-map-title">
-          <span>Carte de demande citoyenne — Grand Moncton</span>
+          <span>{t.mapPageTitle}</span>
         </div>
       </div>
     </div>
