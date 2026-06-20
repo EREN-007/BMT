@@ -10,18 +10,24 @@ Démarrage : 20 juin 2026, au réveil.
 
 ---
 
-## État actuel (point de départ)
+## État actuel — mise à jour 20 juin 2026 (fin semaines 1-2)
 
 - React 19 + TypeScript + Vite, deux points d'entrée (`index.html` user, `admin.html` admin).
-- **Aucun backend** : tout est dans `localStorage` (`src/lib/storage.ts`). Chaque appareil
-  est isolé — l'admin ne voit que les données du navigateur où il consulte.
-- Aucune authentification, aucun filtrage géographique des participants.
-- Agrégation des dessins déjà codée et fonctionnelle (`src/lib/aggregation/`), grille spatiale,
-  corridors, zones d'équité (`src/lib/equity/`), matrice OD (`src/lib/od/`).
-- Carte admin (`AdminMapPage.tsx`) déjà migrée vers Mapbox GL JS, lit les vraies
-  soumissions (les fausses données de démo viennent d'être retirées).
+- **Backend Supabase en production** : Postgres + RLS + auth anonyme. `src/lib/storage.ts`
+  parle directement à Supabase (`saveSubmission`, `getRoutes`, `getStops`) — plus aucune
+  écriture dans `localStorage` pour les données citoyennes. Un citoyen sur un appareil
+  voit sa soumission apparaître côté admin sur n'importe quel autre appareil.
+- Auth Supabase anonyme active (`getOrCreateUserId()` dans `src/lib/auth.ts`), filtrage
+  géographique par préfixe FSA en place (client **et** serveur, voir semaine 2 ci-dessous).
+- Agrégation des dessins codée et fonctionnelle (`src/lib/aggregation/`), grille spatiale,
+  corridors, zones d'équité (`src/lib/equity/`), matrice OD (`src/lib/od/`). L'algorithme
+  d'ordonnancement des corridors (`corridors.ts`) a été corrigé (bug de zigzag, voir notes
+  plus bas).
+- Carte admin (`AdminMapPage.tsx`) sur Mapbox GL JS, lit les vraies soumissions Supabase
+  et se met à jour **en direct** via Supabase Realtime (`postgres_changes` sur
+  `routes`/`stops`, debounce 500ms).
 - Pas de stockage de documents de référence, pas de RAG, pas d'IA assistante, pas de
-  module budgétaire.
+  module budgétaire — c'est l'objet des semaines 3-4, pas commencé.
 
 ---
 
@@ -94,53 +100,102 @@ Démarrage : 20 juin 2026, au réveil.
 
 ---
 
-## Semaine 1 — 20 au 26 juin : Fondations backend
+## Semaine 1 — 20 au 26 juin : Fondations backend ✅ TERMINÉ
 
 **But : sortir du tout-`localStorage`, avoir une vraie base de données partagée.**
 
-- [ ] Créer le projet Supabase (Postgres + extensions `postgis` + `pgvector`).
-- [ ] Modéliser le schéma :
+- [x] Créer le projet Supabase (Postgres).
+- [x] Modéliser le schéma — **écart au plan** : pas de `postgis`/`pgvector`, ni de type
+  `geography`. `routes.points`/`stops.pos` sont en `jsonb` brut (`[lat,lng]`), décision
+  documentée dans `supabase/migrations/0001_init.sql` : l'agrégation tourne entièrement
+  côté client en JS et ne fait aucune requête spatiale serveur, donc PostGIS n'apportait
+  rien aujourd'hui. **`pgvector` reste à activer en semaine 3** pour le RAG.
   ```sql
-  users        (id uuid, postal_code text, created_at)
+  users        (id uuid, fsa_prefix text, created_at)
   submissions  (id uuid, user_id fk, submission_number int, created_at)
-  routes       (id uuid, submission_id fk, points geography(LineString), color)
-  stops        (id uuid, submission_id fk, pos geography(Point), type, label)
+  routes       (id uuid, submission_id fk, points jsonb, color)
+  stops        (id uuid, submission_id fk, pos jsonb, type, label)
   forms        (id uuid, submission_id fk, answers jsonb)
+  admins       (user_id uuid)  -- rôle admin = ligne dans cette table, pas un rôle Postgres
   ```
-- [ ] Activer Row Level Security (RLS) : un user ne peut écrire que ses propres
-  soumissions, l'admin a un rôle séparé en lecture totale.
-- [ ] Créer un client `src/lib/supabase.ts` (clé publique + URL en variable d'env Vite,
-  même pattern que `VITE_MAPBOX_TOKEN`).
-- [ ] Réécrire `src/lib/storage.ts` : remplacer les fonctions `saveRoutes`/`getRoutes`/
-  `saveStops`/`getStops` par des appels Supabase, en gardant la même signature
-  publique pour limiter les changements dans les pages appelantes.
-- [ ] Garder `purgeSeedData()` actif le temps de la transition (nettoyage local),
-  le retirer une fois la bascule confirmée stable.
+- [x] Row Level Security (RLS) activée sur toutes les tables : un user ne lit/écrit que
+  ses propres lignes, l'admin (présent dans `admins`) a un accès lecture totale via policy
+  dédiée (pas de clé `service_role` exposée au client).
+- [x] Client `src/lib/supabase.ts` créé (clé publique + URL en variable d'env Vite).
+- [x] `src/lib/storage.ts` réécrit : `saveSubmission`/`getRoutes`/`getStops` parlent à
+  Supabase, signature publique conservée côté pages appelantes.
+- [x] Données de démo retirées (plus de seed local) — confirmé, aucune trace de
+  `purgeSeedData`/`ensureSeedData` dans le code actuel.
 
-**Livrable de fin de semaine :** un citoyen qui dessine sur un appareil voit sa
+**Bug de production découvert et corrigé en cours de route (hors plan initial) :**
+l'auth anonyme Supabase était désactivée par défaut dans les réglages du projet
+("Allow anonymous sign-ins" off), ce qui faisait échouer silencieusement toute
+soumission citoyenne ("Impossible d'enregistrer votre tracé"). Corrigé côté dashboard
+Supabase (Authentication → Sign In / Providers).
+
+**Livrable de fin de semaine — atteint :** un citoyen qui dessine sur un appareil voit sa
 soumission apparaître dans Supabase, visible depuis n'importe quel autre appareil
 connecté à l'admin.
 
 ---
 
-## Semaine 2 — 27 juin au 3 juillet : Auth, filtrage géographique, numérotation
+## Semaine 2 — 27 juin au 3 juillet : Auth, filtrage géographique, numérotation ✅ TERMINÉ
 
 **But : seuls les citoyens de Moncton/Riverview/Dieppe participent, chaque dessin
 est tracé et numéroté correctement.**
 
-- [ ] Auth Supabase anonyme (un `user_id` stable, persistant entre sessions).
-- [ ] Écran de saisie du code postal (intégré à `LanguageChoice.tsx` ou juste après).
-- [ ] Validation par préfixe FSA (3 premiers caractères) — liste blanche des préfixes
-  Moncton/Riverview/Dieppe. Refus poli + message explicatif si hors zone.
-- [ ] Trigger Postgres (ou logique applicative) pour `submission_number` : incrément
-  automatique par `user_id`, autorise les envois multiples, chacun numéroté.
-- [ ] Mettre à jour `ResultsPage.tsx` et `AdminSimulator.tsx` pour lire depuis Supabase
-  au lieu de `localStorage` (suite du nettoyage `ensureSeedData` déjà fait).
-- [ ] `AdminMapPage.tsx` : abonnement Supabase Realtime pour mise à jour live de la
-  carte mère sans recharger la page.
+- [x] Auth Supabase anonyme (`user_id` stable via `getOrCreateUserId()`).
+- [x] Écran de saisie du code postal — `src/pages/PostalCodePage.tsx`, route `/postal`
+  entre `/language` et `/map`.
+- [x] Validation par préfixe FSA, **côté client et côté serveur** (`src/lib/fsa.ts` +
+  fonction SQL `is_valid_fsa()` + contrainte `check` sur `users.fsa_prefix` +ut
+  policy d'insert sur `submissions`, voir `0002_fsa_gate_realtime.sql`). **Écart au
+  plan** : la liste blanche n'est pas un set précis de préfixes Moncton/Riverview/
+  Dieppe, c'est une approximation par région postale `E1` (premiers 2 caractères).
+  ⚠️ à vérifier/affiner contre les limites officielles Postes Canada avant la
+  présentation — actuellement certains FSA `E1x` hors Grand Moncton pourraient
+  passer, et inversement.
+- [x] Trigger Postgres `next_submission_number()` : incrément auto par `user_id`.
+- [x] `ResultsPage.tsx` et `AdminSimulator.tsx` lisent déjà Supabase via `getRoutes()`/
+  `getStops()` (confirmé dans le code, aucune dépendance `localStorage` restante pour
+  les données citoyennes).
+- [x] `AdminMapPage.tsx` : abonnement Supabase Realtime (`postgres_changes` INSERT sur
+  `routes`/`stops`, debounce 500ms) + tables ajoutées à la publication
+  `supabase_realtime`. **Non re-testé en bout en bout sur le site live** après la
+  correction du bug de corridors — à confirmer.
 
-**Livrable de fin de semaine :** participation filtrée géographiquement, chaque
+**Bug de production découvert et corrigé en cours de route (hors plan initial) :**
+la carte admin affichait des corridors en zigzag, ne correspondant pas à la forme
+réelle des tracés citoyens. Root cause : `orderComponent()` dans
+`src/lib/aggregation/corridors.ts` reconstruisait l'ordre des cellules de grille avec
+un plus-proche-voisin glouton sans tenir compte de la direction du tracé. Réécrit
+pour pondérer les candidats par continuité de cap (bearing) avec un seuil d'arrêt —
+corrigé et déployé. Un effet de bord lié au test a aussi été découvert et nettoyé :
+`getRoutes()`/`getStops()` agrègent **toutes** les soumissions jamais faites dans la
+base (pas de notion de session/date de coupure), donc des tracés de test accumulés
+pendant le développement se mélangeaient en un seul corridor avec les nouveaux
+tracés. Nettoyage ponctuel fait via `supabase/migrations/0003_clear_test_data.sql`
+(`delete from submissions`) — **pas une protection permanente**, à garder en tête si
+de nouvelles données de test s'accumulent avant la présentation finale.
+
+**Livrable de fin de semaine — atteint :** participation filtrée géographiquement, chaque
 dessin tracé à un utilisateur et numéroté, carte admin mise à jour en direct.
+
+---
+
+## Écarts ouverts — à traiter avant ou pendant la semaine 3
+
+Découverts en cours de route, pas encore corrigés :
+
+- [ ] `src/pages/AdminLogin.tsx` utilise encore un mot de passe codé en dur côté client
+  (`bmt2024`) au lieu d'un vrai compte Supabase Auth + appartenance à la table `admins`.
+  C'est exactement le risque pointé dans la checklist Sécurité ("pas de route admin
+  accessible sans vérification de rôle côté serveur") — actuellement non respecté.
+- [ ] `src/pages/Page4Form.tsx` (formulaire citoyen) n'écrit rien dans la table `forms` —
+  aucun appel à `saveSubmission`/Supabase trouvé dans ce fichier. Les réponses du
+  formulaire ne sont donc pas persistées.
+- [ ] Realtime (carte admin) à reconfirmer en conditions réelles après la correction du
+  bug de corridors (voir semaine 2 ci-dessus).
 
 ---
 
