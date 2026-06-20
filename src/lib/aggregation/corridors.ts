@@ -88,8 +88,17 @@ function findConnectedComponents(
 }
 
 // ─── Ordonnancement d'une composante ─────────────────────────────────────
-// Transforme un ensemble non-ordonné de cellules en séquence linéaire
-// en utilisant une traversée nearest-neighbor depuis l'extrémité.
+// Transforme un ensemble non-ordonné de cellules en séquence linéaire.
+//
+// Une traversée nearest-neighbor pure se fait piéger dans les virages : dès
+// qu'un voisin à distance 1 existe, l'ancienne version s'arrêtait d'en
+// chercher d'autres et prenait le premier trouvé (ordre d'itération de la
+// Map, pas forcément le bon) — au niveau d'un virage serré, deux cellules
+// "avant" et "après" le tournant peuvent être à distance 1 l'une de l'autre
+// sans être réellement consécutives sur le tracé, ce qui produit un zigzag.
+// On compare maintenant tous les candidats proches et on privilégie celui
+// qui prolonge le mieux la direction courante (continuité de cap), pas
+// seulement le plus proche.
 
 function orderComponent(cells: GridCell[]): GridCell[] {
   if (cells.length <= 1) return cells
@@ -112,40 +121,65 @@ function orderComponent(cells: GridCell[]): GridCell[] {
   const sorted = [...cells].sort((a, b) => endScore(a) - endScore(b))
   const start  = sorted[0]
 
-  const ordered  = [start]
+  const ordered   = [start]
   const remaining = new Map(cells.map(c => [cellKey(c.row, c.col), c]))
   remaining.delete(cellKey(start.row, start.col))
 
-  let current = start
+  let current     = start
+  let prevBearing: number | null = null  // cap courant (radians), null tant qu'on n'a pas bougé
+
+  const angularDiff = (a: number, b: number): number => {
+    let d = Math.abs(a - b)
+    if (d > Math.PI) d = 2 * Math.PI - d
+    return d
+  }
 
   while (remaining.size > 0) {
-    let bestDist = Infinity
-    let bestKey  = ''
-    let bestCell: GridCell | null = null
-
-    // Chercher le voisin le plus proche parmi les cellules restantes
-    // On cherche d'abord dans les 8-voisins immédiats, puis on élargit
+    // Tous les candidats à portée raisonnable (pas seulement le tout premier trouvé)
+    let candidates: { key: string; cell: GridCell; dist: number }[] = []
     for (const [key, candidate] of remaining) {
       const dr   = Math.abs(candidate.row - current.row)
       const dc   = Math.abs(candidate.col - current.col)
       const dist = Math.max(dr, dc)  // distance de Chebyshev
-
-      if (dist < bestDist) {
-        bestDist = dist
-        bestKey  = key
-        bestCell = candidate
-      }
-
-      // Arrêter si on a trouvé un voisin direct (dist = 1)
-      if (bestDist === 1) break
+      if (dist <= 2) candidates.push({ key, cell: candidate, dist })
     }
 
-    // Si le plus proche est trop loin (> 3 cellules), on arrête le corridor ici
-    if (!bestCell || bestDist > 3) break
+    // Repli : rien à portée 2, élargir jusqu'à 3 (bord du corridor)
+    if (candidates.length === 0) {
+      for (const [key, candidate] of remaining) {
+        const dr   = Math.abs(candidate.row - current.row)
+        const dc   = Math.abs(candidate.col - current.col)
+        const dist = Math.max(dr, dc)
+        if (dist <= 3) candidates.push({ key, cell: candidate, dist })
+      }
+    }
 
-    ordered.push(bestCell)
-    remaining.delete(bestKey)
-    current = bestCell
+    if (candidates.length === 0) break  // plus rien à portée → fin du corridor
+
+    // Score = distance + pénalité de virage (continuité de cap)
+    let best: typeof candidates[0] | null = null
+    let bestScore = Infinity
+
+    for (const c of candidates) {
+      const bearing = Math.atan2(c.cell.lng - current.lng, c.cell.lat - current.lat)
+      const turnPenalty = prevBearing === null ? 0 : angularDiff(bearing, prevBearing) * 2.5
+      const score = c.dist + turnPenalty
+      if (score < bestScore) { bestScore = score; best = c }
+    }
+
+    // Au-delà de ce score, la "meilleure" option n'est plus une continuation
+    // plausible (ex. cellule de bruit due au digitalisation en escalier de la
+    // grille, ou repli d'extrémité) — mieux vaut arrêter le corridor ici que
+    // de raccrocher une cellule hors-trajet et recréer un zigzag en bout de ligne.
+    // Calibré pour accepter des virages jusqu'à ~100-110° (intersections de
+    // rue plausibles) et rejeter les retours en arrière (> ~120°).
+    const SCORE_CAP = 6.5
+    if (!best || bestScore > SCORE_CAP) break
+
+    prevBearing = Math.atan2(best.cell.lng - current.lng, best.cell.lat - current.lat)
+    ordered.push(best.cell)
+    remaining.delete(best.key)
+    current = best.cell
   }
 
   return ordered
