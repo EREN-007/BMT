@@ -91,40 +91,53 @@ alter table forms        enable row level security;
 alter table admins       enable row level security;
 
 -- Un citoyen ne touche que ses propres données.
+-- `drop policy if exists` avant chaque `create` rend ce script ré-exécutable
+-- sans erreur (utile pour itérer depuis le SQL Editor Supabase).
+drop policy if exists "users select own" on users;
 create policy "users select own" on users
   for select using (auth.uid() = id);
+drop policy if exists "users insert own" on users;
 create policy "users insert own" on users
   for insert with check (auth.uid() = id);
+drop policy if exists "users update own" on users;
 create policy "users update own" on users
   for update using (auth.uid() = id) with check (auth.uid() = id);
 
+drop policy if exists "submissions select own" on submissions;
 create policy "submissions select own" on submissions
   for select using (auth.uid() = user_id);
+drop policy if exists "submissions insert own" on submissions;
 create policy "submissions insert own" on submissions
   for insert with check (auth.uid() = user_id);
 
+drop policy if exists "routes select own" on routes;
 create policy "routes select own" on routes
   for select using (
     exists (select 1 from submissions s where s.id = submission_id and s.user_id = auth.uid())
   );
+drop policy if exists "routes insert own" on routes;
 create policy "routes insert own" on routes
   for insert with check (
     exists (select 1 from submissions s where s.id = submission_id and s.user_id = auth.uid())
   );
 
+drop policy if exists "stops select own" on stops;
 create policy "stops select own" on stops
   for select using (
     exists (select 1 from submissions s where s.id = submission_id and s.user_id = auth.uid())
   );
+drop policy if exists "stops insert own" on stops;
 create policy "stops insert own" on stops
   for insert with check (
     exists (select 1 from submissions s where s.id = submission_id and s.user_id = auth.uid())
   );
 
+drop policy if exists "forms select own" on forms;
 create policy "forms select own" on forms
   for select using (
     exists (select 1 from submissions s where s.id = submission_id and s.user_id = auth.uid())
   );
+drop policy if exists "forms insert own" on forms;
 create policy "forms insert own" on forms
   for insert with check (
     exists (select 1 from submissions s where s.id = submission_id and s.user_id = auth.uid())
@@ -133,16 +146,22 @@ create policy "forms insert own" on forms
 -- L'admin (présent dans `admins`) peut tout lire, sur toutes les tables — c'est ce
 -- qui remplace l'accès "service_role only" pour la lecture en lecture seule depuis
 -- le client admin authentifié, sans jamais exposer la clé service_role au navigateur.
+drop policy if exists "admin read all submissions" on submissions;
 create policy "admin read all submissions" on submissions
   for select using (exists (select 1 from admins a where a.user_id = auth.uid()));
+drop policy if exists "admin read all routes" on routes;
 create policy "admin read all routes" on routes
   for select using (exists (select 1 from admins a where a.user_id = auth.uid()));
+drop policy if exists "admin read all stops" on stops;
 create policy "admin read all stops" on stops
   for select using (exists (select 1 from admins a where a.user_id = auth.uid()));
+drop policy if exists "admin read all forms" on forms;
 create policy "admin read all forms" on forms
   for select using (exists (select 1 from admins a where a.user_id = auth.uid()));
+drop policy if exists "admin read all users" on users;
 create policy "admin read all users" on users
   for select using (exists (select 1 from admins a where a.user_id = auth.uid()));
 
+drop policy if exists "admins self check" on admins;
 create policy "admins self check" on admins
   for select using (auth.uid() = user_id);
