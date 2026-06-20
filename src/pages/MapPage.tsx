@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Map, { Source, Layer, Marker } from 'react-map-gl/mapbox'
 import type { MapRef, MapMouseEvent } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { saveRoutes, saveStops } from '@/lib/storage'
+import { saveSubmission } from '@/lib/storage'
 import { getLang, MAP_T } from '@/lib/lang'
 
 // ─── Mapbox config ────────────────────────────────────────────────────────────
@@ -465,9 +465,9 @@ function MapPage() {
   }, [])
 
   // ── Sauvegarder et naviguer ────────────────────────────────────────────────
-  const handleNext = useCallback(() => {
-    const sessionId = `session-${Date.now()}`
+  const [isSaving, setIsSaving] = useState(false)
 
+  const handleNext = useCallback(async () => {
     // Auto-terminer si l'utilisateur clique "Suivant" en cours de tracé
     const allRoutes = isDrawing
       ? routes.map(r =>
@@ -483,17 +483,22 @@ function MapPage() {
 
     const finishedRoutes = allRoutes.filter(r => r.finished && r.points.length >= 2)
 
-    if (finishedRoutes.length > 0)
-      saveRoutes(
-        finishedRoutes.map(r => ({ points: r.snappedPoints ?? r.points, color: r.color })),
-        sessionId,
-      )
-
-    if (stops.length > 0)
-      saveStops(stops.map(s => ({ pos: s.position, type: s.type, label: s.label })), sessionId)
-
-    navigate('/page4')
-  }, [routes, stops, navigate, isDrawing])
+    setIsSaving(true)
+    try {
+      await saveSubmission({
+        routes: finishedRoutes.map(r => ({ points: r.snappedPoints ?? r.points, color: r.color })),
+        stops:  stops.map(s => ({ pos: s.position, type: s.type, label: s.label })),
+      })
+      navigate('/page4')
+    } catch (err) {
+      console.error('saveSubmission failed', err)
+      alert(lang === 'fr'
+        ? "Impossible d'enregistrer votre tracé — vérifiez votre connexion et réessayez."
+        : 'Could not save your route — check your connection and try again.')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [routes, stops, navigate, isDrawing, lang])
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const finishedCount = routes.filter(r => r.finished).length
@@ -749,8 +754,8 @@ function MapPage() {
             {stationCount  > 0 && <span>{t.statStation(stationCount)}</span>}
           </div>
 
-          <button className="mp-ft-next" onClick={handleNext}>
-            {t.next}
+          <button className="mp-ft-next" onClick={handleNext} disabled={isSaving}>
+            {isSaving ? '…' : t.next}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="9 18 15 12 9 6"/>
             </svg>

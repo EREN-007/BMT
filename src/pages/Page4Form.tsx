@@ -43,7 +43,7 @@ function Page4Form() {
     if (!validate()) return
     setSent(true)
     clearMapDraft()
-    fireSubmissionConfirmation(lang)
+    void fireSubmissionConfirmation(lang)
   }
 
   if (sent) {

@@ -10,9 +10,8 @@ export interface ParticipationStats {
   stopVotes:    number   // votes d'arrêts
 }
 
-export function getParticipationStats(): ParticipationStats {
-  const routes   = getRoutes()
-  const stops    = getStops()
+export async function getParticipationStats(): Promise<ParticipationStats> {
+  const [routes, stops] = await Promise.all([getRoutes(), getStops()])
   const sessions = new Set(routes.map(r => r.sessionId).filter(Boolean))
   return {
     participants: sessions.size,
@@ -109,9 +108,9 @@ export function dismissNotifications(): void {
 // ─── Notification de confirmation après soumission ───────────────────────
 // Peut être appelée depuis Page4Form une fois le formulaire envoyé.
 
-export function fireSubmissionConfirmation(lang: 'fr' | 'en'): void {
+export async function fireSubmissionConfirmation(lang: 'fr' | 'en'): Promise<void> {
   if (!isNotifSupported() || Notification.permission !== 'granted') return
-  const stats  = getParticipationStats()
+  const stats  = await getParticipationStats()
   const { title } = NOTIF_CONTENT[lang](stats)
   const body = lang === 'fr'
     ? `Merci ! Votre contribution a bien été enregistrée. La carte sera mise à jour sous peu.`
