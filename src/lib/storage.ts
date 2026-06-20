@@ -1,89 +1,81 @@
 import { CitizenRoute, CitizenStop } from './aggregation/types'
+import { supabase } from './supabase'
+import { getOrCreateUserId } from './auth'
 
-const KEY_ROUTES  = 'bmt_citizen_routes'
-const KEY_STOPS   = 'bmt_citizen_stops'
-const KEY_SEEDED  = 'bmt_seeded_v1'
+// ─── Soumission citoyenne ───────────────────────────────────────────────────
+// Un appel = une visite citoyenne (les dessins + arrêts du formulaire en cours).
+// Crée une ligne `submissions` (numérotée automatiquement par trigger Postgres,
+// cf. supabase/migrations/0001_init.sql), puis les routes/stops qui s'y rattachent.
+// RLS empêche d'écrire dans la soumission de quelqu'un d'autre.
 
-// ─── CRUD Routes ───────────────────────────────────────────────────────────
+export async function saveSubmission(input: {
+  routes: Array<{ points: [number, number][]; color: string }>
+  stops:  Array<{ pos: [number, number]; type: 'busstop' | 'station'; label: string }>
+}): Promise<void> {
+  const userId = await getOrCreateUserId()
 
-export function saveRoutes(
-  routes: Array<{ points: [number, number][]; color: string }>,
-  sessionId: string,
-): void {
-  const existing = getRoutes()
-  const now = Date.now()
+  const { data: submission, error: subErr } = await supabase
+    .from('submissions')
+    .insert({ user_id: userId })
+    .select('id')
+    .single()
+  if (subErr || !submission) throw subErr ?? new Error('Échec de création de la soumission')
 
-  const newRoutes: CitizenRoute[] = routes.map((r, i) => ({
-    id:        `r-${now}-${sessionId}-${i}`,
-    timestamp: now,
-    sessionId,
+  if (input.routes.length > 0) {
+    const { error } = await supabase.from('routes').insert(
+      input.routes.map(r => ({ submission_id: submission.id, points: r.points, color: r.color })),
+    )
+    if (error) throw error
+  }
+
+  if (input.stops.length > 0) {
+    const { error } = await supabase.from('stops').insert(
+      input.stops.map(s => ({ submission_id: submission.id, pos: s.pos, type: s.type, label: s.label })),
+    )
+    if (error) throw error
+  }
+}
+
+// ─── Lecture ─────────────────────────────────────────────────────────────────
+// Sous RLS : un citoyen ne voit que ses propres soumissions, un admin (présent
+// dans la table `admins`) voit tout. Pas de distinction de code ici — c'est la
+// policy Postgres qui décide ce qui revient.
+
+export async function getRoutes(): Promise<CitizenRoute[]> {
+  const { data, error } = await supabase
+    .from('routes')
+    .select('id, submission_id, color, points, created_at')
+  if (error) throw error
+
+  return (data ?? []).map(r => ({
+    id:        r.id,
+    timestamp: new Date(r.created_at).getTime(),
+    sessionId: r.submission_id,
     color:     r.color,
-    points:    r.points,
+    points:    r.points as [number, number][],
   }))
-
-  localStorage.setItem(KEY_ROUTES, JSON.stringify([...existing, ...newRoutes]))
 }
 
-export function getRoutes(): CitizenRoute[] {
-  try {
-    const raw = localStorage.getItem(KEY_ROUTES)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
+export async function getRouteCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from('routes')
+    .select('id', { count: 'exact', head: true })
+  if (error) throw error
+  return count ?? 0
 }
 
-export function getRouteCount(): number {
-  return getRoutes().length
-}
+export async function getStops(): Promise<CitizenStop[]> {
+  const { data, error } = await supabase
+    .from('stops')
+    .select('id, submission_id, type, pos, label, created_at')
+  if (error) throw error
 
-// ─── CRUD Stops ────────────────────────────────────────────────────────────
-
-export function saveStops(
-  stops: Array<{ pos: [number, number]; type: 'busstop' | 'station'; label: string }>,
-  sessionId: string,
-): void {
-  const existing = getStops()
-  const now = Date.now()
-
-  const newStops: CitizenStop[] = stops.map((s, i) => ({
-    id:        `s-${now}-${sessionId}-${i}`,
-    timestamp: now,
-    sessionId,
-    type:      s.type,
-    pos:       s.pos,
+  return (data ?? []).map(s => ({
+    id:        s.id,
+    timestamp: new Date(s.created_at).getTime(),
+    sessionId: s.submission_id,
+    type:      s.type as 'busstop' | 'station',
+    pos:       s.pos as [number, number],
     label:     s.label,
   }))
-
-  localStorage.setItem(KEY_STOPS, JSON.stringify([...existing, ...newStops]))
-}
-
-export function getStops(): CitizenStop[] {
-  try {
-    const raw = localStorage.getItem(KEY_STOPS)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
-}
-
-// ─── Reset ─────────────────────────────────────────────────────────────────
-
-export function clearAll(): void {
-  localStorage.removeItem(KEY_ROUTES)
-  localStorage.removeItem(KEY_STOPS)
-  localStorage.removeItem(KEY_SEEDED)
-}
-
-// ─── Nettoyage des anciennes données de démonstration ──────────────────────
-// L'app injectait auparavant ~171 soumissions citoyennes simulées (flag
-// bmt_seeded_v1) pour visualiser la carte avant le lancement réel. Cette
-// fonction retire ces entrées factices (id préfixé "seed-") sans toucher
-// aux vraies soumissions citoyennes, puis efface le flag définitivement.
-// Idempotente — ne fait rien si l'amorçage n'a jamais eu lieu sur cet appareil.
-
-export function purgeSeedData(): void {
-  if (!localStorage.getItem(KEY_SEEDED)) return
-
-  const routes = getRoutes().filter(r => !r.id.startsWith('seed-'))
-  const stops  = getStops().filter(s => !s.id.startsWith('seed-'))
-  localStorage.setItem(KEY_ROUTES, JSON.stringify(routes))
-  localStorage.setItem(KEY_STOPS,  JSON.stringify(stops))
-  localStorage.removeItem(KEY_SEEDED)
 }

@@ -8,7 +8,6 @@ import {
   dismissNotifications,
   ParticipationStats,
 } from '@/lib/participation'
-import { purgeSeedData } from '@/lib/storage'
 
 interface Props {
   onSelect: (lang: 'en' | 'fr') => void
@@ -62,8 +61,7 @@ function LanguageChoice({ onSelect, to = '/map' }: Props) {
 
   // Pré-charger les stats dès le montage (ne bloque pas le rendu)
   useEffect(() => {
-    purgeSeedData()
-    setStats(getParticipationStats())
+    getParticipationStats().then(setStats)
   }, [])
 
   // ── Sélection de langue ──────────────────────────────────────────────────

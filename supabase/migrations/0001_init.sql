@@ -1,7 +1,11 @@
 -- BMT — schéma initial (semaine 1 du plan handoff.md)
 -- À exécuter dans Supabase SQL Editor (ou via `supabase db push` une fois le CLI lié).
-
-create extension if not exists postgis;
+--
+-- Note : pas de PostGIS pour l'instant. L'agrégation (grille spatiale, corridors)
+-- tourne entièrement côté client en JS (src/lib/aggregation/) et ne fait aucune
+-- requête spatiale serveur — stocker les tracés en jsonb simple ([lat,lng][]) évite
+-- toute la complexité de conversion WKT/GeoJSON pour un bénéfice nul aujourd'hui.
+-- À reconsidérer si l'agrégation passe un jour côté serveur (semaine 3/4+).
 
 -- ─── Rôle admin ──────────────────────────────────────────────────────────────
 -- Pas de mot de passe en dur côté client : l'admin est un vrai compte Supabase Auth
@@ -15,9 +19,12 @@ create table if not exists admins (
 -- Un user = un compte Supabase Auth anonyme (ou email plus tard). On ne stocke que
 -- le préfixe FSA du code postal (3 caractères), jamais le code complet, pour limiter
 -- la donnée personnelle conservée (cf. section Sécurité du plan).
+-- fsa_prefix est nullable pour l'instant : la session anonyme est créée dès le
+-- premier dessin (semaine 1), le filtrage par code postal arrive en semaine 2.
+-- Une migration de suivi rendra ce champ obligatoire une fois l'UI de saisie livrée.
 create table if not exists users (
   id          uuid primary key references auth.users(id) on delete cascade,
-  fsa_prefix  text not null check (char_length(fsa_prefix) = 3),
+  fsa_prefix  text check (fsa_prefix is null or char_length(fsa_prefix) = 3),
   created_at  timestamptz not null default now()
 );
 
@@ -32,7 +39,7 @@ create table if not exists submissions (
 create table if not exists routes (
   id            uuid primary key default gen_random_uuid(),
   submission_id uuid not null references submissions(id) on delete cascade,
-  points        geography(LineString, 4326) not null,
+  points        jsonb not null, -- [[lat,lng], [lat,lng], ...]
   color         text not null,
   created_at    timestamptz not null default now()
 );
@@ -40,7 +47,7 @@ create table if not exists routes (
 create table if not exists stops (
   id            uuid primary key default gen_random_uuid(),
   submission_id uuid not null references submissions(id) on delete cascade,
-  pos           geography(Point, 4326) not null,
+  pos           jsonb not null, -- [lat,lng]
   type          text not null check (type in ('busstop', 'station')),
   label         text not null,
   created_at    timestamptz not null default now()
@@ -88,6 +95,8 @@ create policy "users select own" on users
   for select using (auth.uid() = id);
 create policy "users insert own" on users
   for insert with check (auth.uid() = id);
+create policy "users update own" on users
+  for update using (auth.uid() = id) with check (auth.uid() = id);
 
 create policy "submissions select own" on submissions
   for select using (auth.uid() = user_id);

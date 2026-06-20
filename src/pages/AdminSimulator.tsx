@@ -13,7 +13,7 @@ import {
   computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
 } from '@/lib/equity'
 import { computeRidership, RidershipResult } from '@/lib/ridership'
-import { getRoutes, purgeSeedData } from '@/lib/storage'
+import { getRoutes } from '@/lib/storage'
 import { getLang, ADMIN_T } from '@/lib/lang'
 
 const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
@@ -709,8 +709,7 @@ function AdminSimulator() {
 
   // ── Chargement des tracés citoyens (une seule fois au montage) ────────────
   useEffect(() => {
-    purgeSeedData()
-    citizenRoutesRef.current = getRoutes()
+    getRoutes().then(r => { citizenRoutesRef.current = r })
   }, [])
 
   // ── Matrice O-D — recalcul quand les lignes actives changent ─────────────

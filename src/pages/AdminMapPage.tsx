@@ -4,7 +4,7 @@ import MapGL, { Source, Layer, Marker, Popup } from 'react-map-gl/mapbox'
 import type { MapMouseEvent } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { aggregate, AggregationResult } from '@/lib/aggregation'
-import { getRoutes, getStops, purgeSeedData } from '@/lib/storage'
+import { getRoutes, getStops } from '@/lib/storage'
 import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
 import {
   computeEquity, gapLevelColor, EquityResult, EQ_ZONES,
@@ -99,10 +99,8 @@ function AdminMapPage() {
   const [odMatrix,     setOdMatrix]     = useState<ODMatrix | null>(null)
   const [equityResult, setEquityResult] = useState<EquityResult | null>(null)
 
-  const runAggregation = useCallback(() => {
-    purgeSeedData()  // retire les anciennes données de démonstration s'il y en a
-    const routes = getRoutes()
-    const stops  = getStops()
+  const runAggregation = useCallback(async () => {
+    const [routes, stops] = await Promise.all([getRoutes(), getStops()])
     const agg    = aggregate(routes, stops)
     setResult(agg)
     setLastUpdate(Date.now())
