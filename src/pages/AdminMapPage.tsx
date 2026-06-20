@@ -4,7 +4,7 @@ import MapGL, { Source, Layer, Marker, Popup } from 'react-map-gl/mapbox'
 import type { MapMouseEvent } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { aggregate, AggregationResult } from '@/lib/aggregation'
-import { getRoutes, getStops, ensureSeedData } from '@/lib/storage'
+import { getRoutes, getStops, purgeSeedData } from '@/lib/storage'
 import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
 import {
   computeEquity, gapLevelColor, EquityResult, EQ_ZONES,
@@ -43,151 +43,8 @@ function densityRadius(count: number, max: number): number {
   return 5
 }
 
-// ─── Corridors de routes ──────────────────────────────────────────────────────
-// Chaque corridor = segment agrégé de toutes les propositions citoyennes
-// `count` = nb de citoyens ayant tracé ce corridor
-
-const CORRIDORS = [
-  // ── ROUGE — corridors très demandés
-  {
-    id: 'c1', label: 'Centre-ville → Champlain Place', count: 38,
-    points: [
-      [46.0972, -64.7901], [46.0931, -64.7830], [46.0878, -64.7782],
-      [46.0840, -64.7740], [46.0821, -64.7720],
-    ] as [number,number][],
-  },
-  {
-    id: 'c2', label: 'Wheeler Blvd — Axe principal', count: 34,
-    points: [
-      [46.1020, -64.7600], [46.0980, -64.7680], [46.0930, -64.7750],
-      [46.0878, -64.7782], [46.0830, -64.7820],
-    ] as [number,number][],
-  },
-  {
-    id: 'c3', label: 'Dieppe — Corridor Acadie', count: 29,
-    points: [
-      [46.0988, -64.7350], [46.0960, -64.7440], [46.0935, -64.7530],
-      [46.0910, -64.7640], [46.0878, -64.7782],
-    ] as [number,number][],
-  },
-  // ── ORANGE — corridors moyennement demandés
-  {
-    id: 'c4', label: 'Mountain Rd — Corridor nord', count: 18,
-    points: [
-      [46.1080, -64.7820], [46.1040, -64.7790], [46.0998, -64.7760],
-      [46.0960, -64.7740], [46.0920, -64.7720],
-    ] as [number,number][],
-  },
-  {
-    id: 'c5', label: 'Moncton → Riverview Pont', count: 14,
-    points: [
-      [46.0878, -64.7782], [46.0820, -64.7800], [46.0760, -64.7830],
-      [46.0700, -64.7900], [46.0630, -64.7970],
-    ] as [number,number][],
-  },
-  {
-    id: 'c6', label: 'Dieppe Est — Rue Champlain', count: 12,
-    points: [
-      [46.0940, -64.7200], [46.0960, -64.7300], [46.0970, -64.7400],
-      [46.0975, -64.7480], [46.0970, -64.7560],
-    ] as [number,number][],
-  },
-  {
-    id: 'c7', label: 'Université → Downtown', count: 11,
-    points: [
-      [46.1020, -64.7600], [46.0990, -64.7650], [46.0960, -64.7700],
-      [46.0920, -64.7740], [46.0878, -64.7782],
-    ] as [number,number][],
-  },
-  // ── BLANC — corridors peu demandés
-  {
-    id: 'c8', label: 'Riverview Sud', count: 6,
-    points: [
-      [46.0562, -64.8022], [46.0600, -64.7970], [46.0640, -64.7920],
-      [46.0680, -64.7870], [46.0720, -64.7830],
-    ] as [number,number][],
-  },
-  {
-    id: 'c9', label: 'Moncton Ouest', count: 5,
-    points: [
-      [46.0878, -64.7782], [46.0850, -64.7900], [46.0820, -64.8020],
-      [46.0790, -64.8130], [46.0760, -64.8220],
-    ] as [number,number][],
-  },
-  {
-    id: 'c10', label: 'Dieppe Nord', count: 4,
-    points: [
-      [46.1050, -64.7300], [46.1020, -64.7380], [46.0990, -64.7440],
-      [46.0960, -64.7490], [46.0940, -64.7540],
-    ] as [number,number][],
-  },
-]
-
-// ─── Arrêts de bus ─────────────────────────────────────────────────────────────
-
-const BUS_STOPS = [
-  { id: 'bs1',  label: 'Centre-ville — Main & Highfield',   pos: [46.0878, -64.7782] as [number,number], count: 42 },
-  { id: 'bs2',  label: 'Champlain Place',                    pos: [46.0821, -64.7720] as [number,number], count: 35 },
-  { id: 'bs3',  label: 'Université de Moncton',              pos: [46.1020, -64.7600] as [number,number], count: 30 },
-  { id: 'bs4',  label: 'Dieppe Centre Commercial',           pos: [46.0960, -64.7440] as [number,number], count: 28 },
-  { id: 'bs5',  label: 'Highfield Square',                   pos: [46.0931, -64.7830] as [number,number], count: 22 },
-  { id: 'bs6',  label: 'Wheeler Blvd & Mountain Rd',         pos: [46.0980, -64.7700] as [number,number], count: 18 },
-  { id: 'bs7',  label: 'Riverview Civic Centre',             pos: [46.0620, -64.7950] as [number,number], count: 14 },
-  { id: 'bs8',  label: 'Dieppe Rue Acadie',                  pos: [46.0988, -64.7350] as [number,number], count: 12 },
-  { id: 'bs9',  label: 'Moncton Hospital',                   pos: [46.0960, -64.7740] as [number,number], count: 9  },
-  { id: 'bs10', label: 'Riverview Plaza',                    pos: [46.0562, -64.8022] as [number,number], count: 7  },
-  { id: 'bs11', label: 'Moncton Ouest — Trinity Dr',         pos: [46.0820, -64.8100] as [number,number], count: 5  },
-  { id: 'bs12', label: 'Dieppe Est — Champlain & Amirault',  pos: [46.0940, -64.7200] as [number,number], count: 4  },
-]
-
-// ─── Stations / Gares ──────────────────────────────────────────────────────────
-
-const STATIONS = [
-  { id: 'st1', label: 'Gare centrale Moncton',         pos: [46.0920, -64.7750] as [number,number], count: 38 },
-  { id: 'st2', label: 'Station Dieppe — Pôle Acadie',  pos: [46.0975, -64.7400] as [number,number], count: 24 },
-  { id: 'st3', label: 'Station Riverview',              pos: [46.0630, -64.7970] as [number,number], count: 15 },
-  { id: 'st4', label: 'Station Université',             pos: [46.1020, -64.7610] as [number,number], count: 11 },
-  { id: 'st5', label: 'Station Moncton Ouest',          pos: [46.0790, -64.8130] as [number,number], count: 6  },
-]
-
 // Zones d'équité : définies dans src/lib/equity/data.ts (EQ_ZONES)
 // Couleurs et labels : gapLevelColor / gapLevelLabel depuis src/lib/equity/index.ts
-
-// ─── Flux Origine-Destination ─────────────────────────────────────────────────
-// Données dérivées silencieusement de l'application citoyenne :
-//   • adresses soumises en Page 4 → origine
-//   • tracés de routes en Page 3 → destinations populaires
-// count = nb de citoyens ayant ce déplacement
-
-const OD_FLOWS: {
-  id: string; label: string
-  from: [number,number]; to: [number,number]
-  count: number
-}[] = [
-  { id: 'od1', label: 'Résidentiel → Centre-ville',        from: [46.0700, -64.7640], to: [46.0878, -64.7782], count: 48 },
-  { id: 'od2', label: 'Université → Centre-ville',         from: [46.1020, -64.7600], to: [46.0878, -64.7782], count: 41 },
-  { id: 'od3', label: 'Dieppe → Centre-ville',             from: [46.0960, -64.7440], to: [46.0878, -64.7782], count: 35 },
-  { id: 'od4', label: 'Centre-ville → Champlain Place',    from: [46.0878, -64.7782], to: [46.0821, -64.7720], count: 33 },
-  { id: 'od5', label: 'Riverview → Centre-ville',          from: [46.0620, -64.7950], to: [46.0878, -64.7782], count: 27 },
-  { id: 'od6', label: 'Moncton Nord → Centre-ville',       from: [46.1080, -64.7820], to: [46.0878, -64.7782], count: 22 },
-  { id: 'od7', label: 'Dieppe Est → Dieppe Centre',        from: [46.0940, -64.7200], to: [46.0960, -64.7440], count: 18 },
-  { id: 'od8', label: 'Moncton Ouest → Centre-ville',      from: [46.0820, -64.8100], to: [46.0878, -64.7782], count: 15 },
-  { id: 'od9', label: 'Université → Hôpital Moncton',      from: [46.1020, -64.7600], to: [46.0960, -64.7740], count: 12 },
-  { id:'od10', label: 'Riverview → Champlain Place',       from: [46.0620, -64.7950], to: [46.0821, -64.7720], count: 9  },
-]
-
-const MAX_OD = Math.max(...OD_FLOWS.map(f => f.count))
-
-function odWeight(count: number): number {
-  const ratio = count / MAX_OD
-  if (ratio >= 0.65) return 7
-  if (ratio >= 0.35) return 4
-  return 2
-}
-
-function odOpacity(count: number): number {
-  return 0.3 + 0.55 * (count / MAX_OD)
-}
 
 // ─── Density badge ─────────────────────────────────────────────────────────────
 
@@ -216,7 +73,7 @@ type PopupInfo =
       hasScore: boolean; gapLevel: string; needScore: number; serviceScore: number
       gap: number; pop: number; income: number; seniors: number }
   | { kind: 'od';       lng: number; lat: number; fromName: string; toName: string
-      trips: number; rawCount: number; covered: boolean; isFallback: boolean }
+      trips: number; rawCount: number; covered: boolean }
 
 const CORRIDOR_LAYER = 'admin-corridors-line'
 const EQUITY_LAYER   = 'admin-equity-fill'
@@ -243,7 +100,7 @@ function AdminMapPage() {
   const [equityResult, setEquityResult] = useState<EquityResult | null>(null)
 
   const runAggregation = useCallback(() => {
-    ensureSeedData()  // injecte les données de démonstration si localStorage vide
+    purgeSeedData()  // retire les anciennes données de démonstration s'il y en a
     const routes = getRoutes()
     const stops  = getStops()
     const agg    = aggregate(routes, stops)
@@ -268,20 +125,16 @@ function AdminMapPage() {
 
   useEffect(() => { runAggregation() }, [runAggregation])
 
-  // Corridors et arrêts : données agrégées si disponibles, fallback sur données statiques
-  const livecorridors = result && result.corridors.length > 0
-    ? result.corridors
-    : CORRIDORS.map(c => ({ ...c, maxCellCount: c.count, label: c.label }))
+  // Corridors et arrêts : uniquement des données réellement soumises par les citoyens
+  const livecorridors = result?.corridors ?? []
 
-  const liveStops = result && result.stops.filter(s => s.type === 'busstop').length > 0
-    ? result.stops.filter(s => s.type === 'busstop')
-        .map(s => ({ id: s.id, label: s.label, pos: s.pos as [number,number], count: s.count }))
-    : BUS_STOPS
+  const liveStops = (result?.stops ?? [])
+    .filter(s => s.type === 'busstop')
+    .map(s => ({ id: s.id, label: s.label, pos: s.pos as [number,number], count: s.count }))
 
-  const liveStations = result && result.stops.filter(s => s.type === 'station').length > 0
-    ? result.stops.filter(s => s.type === 'station')
-        .map(s => ({ id: s.id, label: s.label, pos: s.pos as [number,number], count: s.count }))
-    : STATIONS
+  const liveStations = (result?.stops ?? [])
+    .filter(s => s.type === 'station')
+    .map(s => ({ id: s.id, label: s.label, pos: s.pos as [number,number], count: s.count }))
 
   const MAX_ROUTE_LIVE = Math.max(...livecorridors.map(c => c.count), 1)
   const MAX_STOP_LIVE  = Math.max(...liveStops.map(s => s.count), 1)
@@ -350,25 +203,12 @@ function AdminMapPage() {
             color: cell.covered ? '#3498db' : '#e67e22',
             width: Math.min(Math.round(1 + ratio * 7), 8),
             opacity: 0.25 + ratio * 0.65,
-            isFallback: false,
           },
         })
       }
       return { type: 'FeatureCollection', features }
     }
-    // Fallback statique (avant chargement)
-    return {
-      type: 'FeatureCollection',
-      features: OD_FLOWS.map(f => ({
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: [toLngLat(f.from), toLngLat(f.to)] },
-        properties: {
-          fromName: f.label, toName: '', trips: f.count, rawCount: f.count, covered: false,
-          color: '#3498db', width: odWeight(f.count), opacity: odOpacity(f.count),
-          isFallback: true,
-        },
-      })),
-    }
+    return { type: 'FeatureCollection', features: [] }
   }, [odMatrix])
 
   // ── Couches interactives actives (clic) ──────────────────────────────────
@@ -398,7 +238,7 @@ function AdminMapPage() {
     } else if (layerId === OD_LAYER_SOLID || layerId === OD_LAYER_DASH) {
       setPopupInfo({
         kind: 'od', lng, lat, fromName: p.fromName, toName: p.toName,
-        trips: p.trips, rawCount: p.rawCount, covered: p.covered, isFallback: p.isFallback,
+        trips: p.trips, rawCount: p.rawCount, covered: p.covered,
       })
     }
   }, [])
@@ -535,7 +375,7 @@ function AdminMapPage() {
           <label className="adm-legend-item">
             <input type="checkbox" checked={showOD} onChange={e => setShowOD(e.target.checked)} />
             <span className="adm-legend-name">
-              {t.legODLabel(odMatrix ? odMatrix.cells.length : OD_FLOWS.length)}
+              {t.legODLabel(odMatrix ? odMatrix.cells.length : 0)}
             </span>
           </label>
 
@@ -543,15 +383,15 @@ function AdminMapPage() {
           <p className="adm-legend-title">{t.legData}</p>
           <div className="adm-stats-mini">
             <div className="adm-stat-mini">
-              <span>{result ? result.totalRoutes : CORRIDORS.reduce((a,c) => a + c.count, 0)}</span>
+              <span>{result ? result.totalRoutes : 0}</span>
               {t.datCitizen}
             </div>
             <div className="adm-stat-mini">
-              <span>{result ? result.stops.filter(s => s.type === 'busstop').length : BUS_STOPS.length}</span>
+              <span>{result ? result.stops.filter(s => s.type === 'busstop').length : 0}</span>
               {t.datStopClus}
             </div>
             <div className="adm-stat-mini">
-              <span>{result ? result.stops.filter(s => s.type === 'station').length : STATIONS.length}</span>
+              <span>{result ? result.stops.filter(s => s.type === 'station').length : 0}</span>
               {t.datStaClus}
             </div>
           </div>
@@ -793,16 +633,7 @@ function AdminMapPage() {
                 </div>
               )}
 
-              {popupInfo.kind === 'od' && popupInfo.isFallback && (
-                <div style={{ minWidth: 190 }}>
-                  <strong>{popupInfo.fromName}</strong><br />
-                  <span style={{ color: '#666', fontSize: '0.82rem' }}>
-                    {t.popODFb(popupInfo.trips)}
-                  </span>
-                </div>
-              )}
-
-              {popupInfo.kind === 'od' && !popupInfo.isFallback && (
+              {popupInfo.kind === 'od' && (
                 <div style={{ minWidth: 200 }}>
                   <strong>{popupInfo.fromName} → {popupInfo.toName}</strong><br />
                   <span style={{ color: '#666', fontSize: '0.82rem' }}>

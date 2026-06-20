@@ -9,7 +9,7 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { getRoutes, getStops, ensureSeedData } from '@/lib/storage'
+import { getRoutes, getStops, purgeSeedData } from '@/lib/storage'
 import { aggregate, AggregationResult } from '@/lib/aggregation'
 import { getParticipationStats, ParticipationStats } from '@/lib/participation'
 
@@ -95,7 +95,7 @@ function ResultsPage() {
   const [stats,  setStats]  = useState<ParticipationStats>({ participants: 0, drawings: 0, stopVotes: 0 })
 
   useEffect(() => {
-    ensureSeedData()
+    purgeSeedData()
     const routes = getRoutes()
     const stops  = getStops()
     setResult(aggregate(routes, stops, { minCount: 2, minCells: 3 }))
