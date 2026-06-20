@@ -25,6 +25,75 @@ Démarrage : 20 juin 2026, au réveil.
 
 ---
 
+## Sécurité (transversal — s'applique dès la semaine 1, pas juste à la fin)
+
+**Gestion des secrets**
+- [ ] Clé Supabase *service_role* (accès complet) **jamais** dans le client — utilisée
+  uniquement côté Edge Function/serveur. Le client web n'utilise que la clé publique
+  *anon*, contrainte par RLS.
+- [ ] Clé API Claude (pour le cerveau IA) stockée en variable d'env côté Edge Function
+  uniquement — jamais exposée au navigateur, jamais commitée (`.env.local` reste
+  gitignored, comme `VITE_MAPBOX_TOKEN` déjà).
+- [ ] Rotation des clés prévue si une fuite est suspectée avant la présentation.
+
+**Auth & autorisation**
+- [ ] RLS Postgres stricte dès la semaine 1 : un user authentifié ne peut lire/écrire
+  que ses propres lignes (`user_id = auth.uid()`), l'admin passe par un rôle séparé
+  (service role côté serveur, jamais exposé au client public).
+- [ ] L'auth anonyme Supabase ne doit pas permettre d'usurper le `user_id` d'un autre —
+  vérifier que les policies RLS couvrent insert/update/select/delete sur chaque table.
+- [ ] Pas de route admin accessible sans vérification de rôle côté serveur (ne pas se
+  fier uniquement à `admin.html` comme "sécurité par l'obscurité").
+
+**Validation des entrées & anti-abus**
+- [ ] Valider le code postal côté serveur (pas seulement côté client) — un client
+  malveillant peut contourner la validation JS.
+- [ ] Limiter le nombre de soumissions par `user_id`/IP sur une fenêtre de temps
+  (rate limiting) pour éviter le spam de fausses données qui fausserait la synthèse.
+- [ ] Valider la géométrie des tracés côté serveur (bornes géographiques raisonnables
+  autour du Grand Moncton, nombre de points max) pour éviter l'injection de données
+  aberrantes ou des payloads abusifs.
+- [ ] Sanitizer tout texte libre (formulaires, labels d'arrêts) avant stockage et avant
+  affichage — éviter l'injection XSS dans l'admin (qui affiche du contenu généré par
+  des citoyens non vérifiés).
+
+**Confidentialité des données**
+- [ ] Le code postal est une donnée à caractère personnel (même partiel) — ne stocker
+  que le préfixe FSA nécessaire à la validation, pas le code complet si non requis.
+- [ ] Politique de rétention claire : durée de conservation des soumissions, mécanisme
+  de suppression sur demande (cohérent avec la LPRPDE/vie privée si présenté à un
+  ministère, la rigueur sur ce point sera regardée).
+- [ ] Pas de données personnelles identifiables dans les rapports générés par l'IA
+  (le rapport agrège, il ne doit jamais citer un citoyen individuel).
+
+**Uploads admin (documents de référence pour le RAG)**
+- [ ] Restreindre les types de fichiers acceptés (PDF, image, vidéo, HTML) et la taille
+  max, valider le type réel du fichier (pas juste l'extension).
+- [ ] Uploads accessibles uniquement via l'admin authentifié (bucket Supabase Storage
+  privé, URLs signées à durée limitée, pas de bucket public).
+- [ ] Scanner/valider le contenu avant ingestion dans le pipeline d'embedding pour
+  éviter qu'un document corrompu ou malveillant ne casse le pipeline.
+
+**Sécurité du cerveau IA**
+- [ ] Se prémunir contre l'injection de prompt via le corpus RAG : un document uploadé
+  contenant des instructions cachées ne doit pas pouvoir détourner le comportement de
+  l'agent (traiter le contenu récupéré comme donnée, jamais comme instruction).
+- [ ] Le budget reste calculé par du code déterministe, jamais généré par le LLM —
+  principe déjà posé dans le plan, à ne pas relâcher sous pression de deadline.
+- [ ] Limiter le taux d'appels à l'API Claude (contrôle de coût + anti-abus) — l'agent
+  ne doit pas être déclenchable librement par n'importe qui, seulement par l'admin.
+- [ ] Le rapport généré doit afficher ses sources (quels documents du corpus ont été
+  utilisés) pour rester vérifiable face à un public technique (ministère).
+
+**Transport & infra**
+- [ ] HTTPS partout (Netlify le fait par défaut, à vérifier explicitement pour le
+  build admin aussi).
+- [ ] En-têtes de sécurité de base (CSP, X-Frame-Options) sur le déploiement Netlify.
+- [ ] `npm audit` régulier sur les dépendances, en particulier après l'ajout de
+  `supabase-js` et de tout SDK lié au pipeline IA.
+
+---
+
 ## Semaine 1 — 20 au 26 juin : Fondations backend
 
 **But : sortir du tout-`localStorage`, avoir une vraie base de données partagée.**
@@ -120,7 +189,12 @@ d'une carte synthétisée, avec analyse experte et budget chiffré.
 
 - [ ] Test de bout en bout : un citoyen dessine → synthèse → carte mère admin →
   génération du rapport IA, sur plusieurs appareils/comptes réels.
-- [ ] Revue de sécurité légère (RLS Supabase, clés exposées, validation des entrées).
+- [ ] Revue complète de la checklist "Sécurité" ci-dessus : RLS testée avec un compte
+  non-admin (essayer activement de lire/écrire les données d'un autre user), clés
+  vérifiées absentes du bundle client (`grep` sur `dist/`), rate limiting testé,
+  injection de prompt testée avec un faux document corpus contenant des instructions
+  cachées.
+- [ ] `npm audit` final, mise à jour des dépendances à risque avant la présentation.
 - [ ] Relecture du rapport généré avec un œil critique — corriger le ton, la mise en
   page, s'assurer qu'aucun chiffre n'est halluciné.
 - [ ] Marge de buffer pour imprévus (jours volontairement laissés libres).
