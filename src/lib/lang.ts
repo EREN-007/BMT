@@ -167,35 +167,6 @@ export const POSTAL_T = {
   },
 }
 
-export const POSTAL_T = {
-  fr: {
-    title:        'Votre code postal',
-    subtitle:     'Your postal code',
-    instr:        'BMT est réservé aux citoyens du Grand Moncton (Moncton, Riverview, Dieppe).',
-    label:        'Code postal',
-    labelSub:     'Postal code',
-    placeholder:  'E1A 1A1',
-    required:     'Requis',
-    invalidFormat:'Format invalide (ex. E1A 1A1)',
-    outOfZone:    "Désolé, BMT est réservé aux résidents du Grand Moncton pour l'instant.",
-    outOfZoneSub: 'Sorry, BMT is currently limited to Greater Moncton residents.',
-    continue:     'Continuer / Continue',
-  },
-  en: {
-    title:        'Your postal code',
-    subtitle:     'Votre code postal',
-    instr:        'BMT is limited to Greater Moncton citizens (Moncton, Riverview, Dieppe).',
-    label:        'Postal code',
-    labelSub:     'Code postal',
-    placeholder:  'E1A 1A1',
-    required:     'Required',
-    invalidFormat:'Invalid format (e.g. E1A 1A1)',
-    outOfZone:    'Sorry, BMT is currently limited to Greater Moncton residents.',
-    outOfZoneSub: "Désolé, BMT est réservé aux résidents du Grand Moncton pour l'instant.",
-    continue:     'Continue / Continuer',
-  },
-}
-
 export const ADMIN_T = {
   fr: {
     // Login
