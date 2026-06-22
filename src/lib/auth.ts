@@ -40,3 +40,43 @@ export async function setPostalCode(fsaPrefix: string): Promise<void> {
     .eq('id', userId)
   if (error) throw error
 }
+
+// ─── Session admin ────────────────────────────────────────────────────────────
+// Compte Supabase Auth distinct de la session anonyme citoyenne — email/password
+// réel, dont l'appartenance au panneau admin est vérifiée par une ligne dans la
+// table `admins` (cf. 0001_init.sql). C'est cette ligne, pas le simple fait
+// d'être connecté, qui ouvre l'accès en lecture totale via RLS.
+
+async function isCurrentUserAdmin(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return !!data
+}
+
+export async function signInAdmin(email: string, password: string): Promise<void> {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  if (error || !data.user) throw error ?? new Error('Échec de connexion')
+
+  const isAdmin = await isCurrentUserAdmin(data.user.id)
+  if (!isAdmin) {
+    await supabase.auth.signOut()
+    throw new Error('NOT_ADMIN')
+  }
+}
+
+export async function signOutAdmin(): Promise<void> {
+  await supabase.auth.signOut()
+}
+
+// Utilisé au montage de AdminApp pour restaurer la session après un rafraîchissement
+// de page — sans ça, F5 sur une route admin protégée renverrait au login à chaque fois.
+export async function getAdminSession(): Promise<boolean> {
+  const { data } = await supabase.auth.getSession()
+  const userId = data.session?.user.id
+  if (!userId) return false
+  return isCurrentUserAdmin(userId)
+}

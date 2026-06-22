@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { signInAdmin } from '@/lib/auth'
 import { getLang, ADMIN_T } from '@/lib/lang'
 
 interface Props {
@@ -17,7 +18,7 @@ function AdminLogin({ onAuth }: Props) {
   const [loading, setLoading]   = useState(false)
   const [showPass, setShowPass] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
@@ -27,19 +28,17 @@ function AdminLogin({ onAuth }: Props) {
     }
 
     setLoading(true)
-
-    setTimeout(() => {
+    try {
+      await signInAdmin(username.trim(), password)
+      onAuth()
+      navigate('/dashboard')
+    } catch {
+      // Message générique dans tous les cas (identifiants faux, compte pas admin,
+      // erreur réseau) — ne jamais indiquer lequel pour ne pas faciliter l'énumération.
+      setError(t.loginErrCreds)
+    } finally {
       setLoading(false)
-      if (
-        (username.trim().toLowerCase() === 'admin' || username.trim().toLowerCase() === 'admin@bmt.ca') &&
-        password === 'bmt2024'
-      ) {
-        onAuth()
-        navigate('/dashboard')
-      } else {
-        setError(t.loginErrCreds)
-      }
-    }, 900)
+    }
   }
 
   return (
@@ -77,11 +76,11 @@ function AdminLogin({ onAuth }: Props) {
               </svg>
               <input
                 className="al-input"
-                type="text"
-                placeholder="admin"
+                type="email"
+                placeholder="admin@bmt.ca"
                 value={username}
                 onChange={e => { setUsername(e.target.value); setError('') }}
-                autoComplete="username"
+                autoComplete="email"
                 autoFocus
               />
             </div>

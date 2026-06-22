@@ -110,6 +110,7 @@ export const FORM_T = {
     labelSuggestion:'Suggestion',
     labelSuggestionSub:'Suggestion',
     placeholderSuggestion:'Décrivez votre suggestion de ligne de bus… / Describe your bus route suggestion…',
+    saveError:    "Impossible d'envoyer vos informations — vérifiez votre connexion et réessayez.",
   },
   en: {
     title:        'Your information',
@@ -133,6 +134,7 @@ export const FORM_T = {
     labelSuggestion:'Suggestion',
     labelSuggestionSub:'Suggestion',
     placeholderSuggestion:'Describe your bus route suggestion… / Décrivez votre suggestion de ligne de bus…',
+    saveError:    'Could not send your information — check your connection and try again.',
   },
 }
 

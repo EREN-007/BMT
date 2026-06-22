@@ -47,6 +47,11 @@ interface Stop {
 
 const DRAFT_KEY = 'bmt_map_draft'
 
+// Id de la soumission créée par saveSubmission(), transmis à Page4Form via
+// sessionStorage (les deux pages sont des routes séparées, pas d'état partagé en
+// mémoire) pour que le formulaire s'attache à la même soumission, pas une nouvelle.
+export const PENDING_SUBMISSION_KEY = 'bmt_pending_submission_id'
+
 interface DraftData { routes: Route[]; stops: Stop[] }
 
 function loadDraft(): DraftData | null {
@@ -485,10 +490,11 @@ function MapPage() {
 
     setIsSaving(true)
     try {
-      await saveSubmission({
+      const { submissionId } = await saveSubmission({
         routes: finishedRoutes.map(r => ({ points: r.snappedPoints ?? r.points, color: r.color })),
         stops:  stops.map(s => ({ pos: s.position, type: s.type, label: s.label })),
       })
+      sessionStorage.setItem(PENDING_SUBMISSION_KEY, submissionId)
       navigate('/page4')
     } catch (err) {
       console.error('saveSubmission failed', err)
