@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import MapGL, { Source, Layer, Marker, Popup } from 'react-map-gl/mapbox'
 import type { MapMouseEvent } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { aggregate, AggregationResult } from '@/lib/aggregation'
+import { aggregate, AggregationResult, CitizenRoute } from '@/lib/aggregation'
 import { getRoutes, getStops } from '@/lib/storage'
 import { supabase } from '@/lib/supabase'
 import { buildODMatrix, computeCoveredPairs, ODMatrix, OD_ZONES } from '@/lib/od'
@@ -77,6 +77,7 @@ type PopupInfo =
       trips: number; rawCount: number; covered: boolean }
 
 const CORRIDOR_LAYER = 'admin-corridors-line'
+const RAW_LAYER       = 'admin-raw-routes-line'
 const EQUITY_LAYER   = 'admin-equity-fill'
 const OD_LAYER_SOLID = 'admin-od-line-solid'
 const OD_LAYER_DASH  = 'admin-od-line-dash'
@@ -96,10 +97,12 @@ function AdminMapPage({ onLogout }: Props) {
   const [showStations, setShowStations] = useState(true)
   const [showEquity,   setShowEquity]   = useState(false)
   const [showOD,       setShowOD]       = useState(false)
+  const [showRaw,      setShowRaw]      = useState(false)
   const [popupInfo,    setPopupInfo]    = useState<PopupInfo | null>(null)
 
   // ── Agrégation live ──────────────────────────────────────────────────────
   const [result,     setResult]     = useState<AggregationResult | null>(null)
+  const [rawRoutes,  setRawRoutes]  = useState<CitizenRoute[]>([])
   const [lastUpdate, setLastUpdate] = useState<number>(0)
   const [odMatrix,     setOdMatrix]     = useState<ODMatrix | null>(null)
   const [equityResult, setEquityResult] = useState<EquityResult | null>(null)
@@ -108,6 +111,7 @@ function AdminMapPage({ onLogout }: Props) {
     const [routes, stops] = await Promise.all([getRoutes(), getStops()])
     const agg    = aggregate(routes, stops)
     setResult(agg)
+    setRawRoutes(routes)
     setLastUpdate(Date.now())
 
     // Matrice O-D : corridors agrégés → paires couvertes, tracés citoyens → flux
@@ -181,6 +185,21 @@ function AdminMapPage({ onLogout }: Props) {
       },
     })),
   }), [livecorridors, MAX_ROUTE_LIVE])
+
+  // ── GeoJSON : tracés bruts ────────────────────────────────────────────────
+  // Géométrie exacte soumise par chaque citoyen (mêmes `points` que MapPage),
+  // sans passer par la grille/corridors — sert à vérifier que la carte admin
+  // correspond bien au tracé dessiné, indépendamment du heatmap de densité.
+  const rawFC = useMemo<GeoJSON.FeatureCollection>(() => ({
+    type: 'FeatureCollection',
+    features: rawRoutes
+      .filter(r => r.points.length >= 2)
+      .map(r => ({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: r.points.map(toLngLat) },
+        properties: { id: r.id, color: r.color },
+      })),
+  }), [rawRoutes])
 
   // ── GeoJSON : zones d'équité ─────────────────────────────────────────────
   const equityFC = useMemo<GeoJSON.FeatureCollection>(() => ({
@@ -349,6 +368,10 @@ function AdminMapPage({ onLogout }: Props) {
             <input type="checkbox" checked={showStations} onChange={e => setShowStations(e.target.checked)} />
             <span className="adm-legend-name">{t.legStations(liveStations.length)}</span>
           </label>
+          <label className="adm-legend-item">
+            <input type="checkbox" checked={showRaw} onChange={e => setShowRaw(e.target.checked)} />
+            <span className="adm-legend-name">{t.legRaw(rawRoutes.length)}</span>
+          </label>
 
           <div className="adm-legend-sep" />
           <p className="adm-legend-title">{t.legEquity}</p>
@@ -480,6 +503,23 @@ function AdminMapPage({ onLogout }: Props) {
                   'line-color':   ['get', 'color'],
                   'line-width':   ['get', 'width'],
                   'line-opacity': 0.85,
+                }}
+              />
+            </Source>
+          )}
+
+          {/* Tracés bruts — géométrie exacte des soumissions, pour vérification */}
+          {showRaw && (
+            <Source id="admin-raw-routes" type="geojson" data={rawFC}>
+              <Layer
+                id={RAW_LAYER}
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color':   ['get', 'color'],
+                  'line-width':   3,
+                  'line-opacity': 0.95,
+                  'line-dasharray': [2, 1.5],
                 }}
               />
             </Source>

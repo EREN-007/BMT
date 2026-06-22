@@ -11,8 +11,12 @@ export const BBOX = {
 }
 
 // Taille d'une cellule en degrés
-// 0.001° lat ≈ 111 m   /   0.001° lng ≈ 77 m à 46°N
-export const CELL_SIZE = 0.001
+// 0.0004° lat ≈ 44 m   /   0.0004° lng ≈ 31 m à 46°N
+// Affinée (était 0.001°/~111m) pour réduire la distorsion entre le tracé
+// citoyen original et le corridor reconstruit — l'écart se voit à l'œil sur
+// la carte admin et fausse aussi la longueur utilisée par le futur moteur
+// de budget (coût/km de ligne, semaine 3 du plan).
+export const CELL_SIZE = 0.0004
 
 // ─── Utilitaires de grille ─────────────────────────────────────────────────
 

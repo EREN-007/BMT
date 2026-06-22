@@ -20,7 +20,10 @@ export function aggregate(
   stops: CitizenStop[] = [],
   options: { minCount?: number; minCells?: number } = {},
 ): AggregationResult {
-  const { minCount = 1, minCells = 3 } = options
+  // minCells abaissé (était 3) suite au passage à des cellules plus fines
+  // (grid.ts, 44m au lieu de 111m) — sinon un tracé réel mais court
+  // (< ~130m) disparaissait entièrement de la carte admin.
+  const { minCount = 1, minCells = 2 } = options
 
   if (routes.length === 0) {
     return {
