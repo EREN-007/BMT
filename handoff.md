@@ -238,12 +238,11 @@ superposés.
   migration écrite (`supabase/migrations/0004_input_guardrails.sql`) : contraintes
   `check` sur `routes.points` (2 à 500 points, lat/lng dans une bbox Grand Moncton avec
   marge) et `stops.pos` (même bbox), trigger `enforce_submission_rate_limit()` qui
-  bloque un `user_id` au-delà de 30 soumissions/heure. **Pas encore exécutée en
-  production** — aucun accès CLI/identifiants Supabase depuis cet environnement, à
-  exécuter manuellement dans le SQL Editor Supabase (même processus que 0001-0003)
-  avant de cocher cet écart comme résolu. Limite connue : le rate limit est par
-  `user_id` seulement, pas par IP — contournable en créant plusieurs sessions
-  anonymes, acceptable pour l'instant mais à garder en tête.
+  bloque un `user_id` au-delà de 30 soumissions/heure. Exécution manuelle en cours par
+  l'admin dans le SQL Editor Supabase (même processus que 0001-0003) — à confirmer puis
+  cocher cet écart comme résolu. Limite connue : le rate limit est par `user_id`
+  seulement, pas par IP — contournable en créant plusieurs sessions anonymes,
+  acceptable pour l'instant mais à garder en tête.
 
 ---
 
@@ -256,14 +255,30 @@ superposés.
 - [ ] Pipeline d'embedding : extraction de texte (PDF/HTML) → embeddings → stockage
   `pgvector`. (Vidéo/image : transcription/description avant embedding, ou métadonnée
   simple en phase 1 si le temps manque.)
-- [ ] Table de coûts unitaires configurable par l'admin (coût/km de ligne, coût/abribus,
-  coût/heure-véhicule, etc.) — valeurs de départ à valider avec des références
-  réelles pour Moncton/NB.
-- [ ] Moteur de calcul déterministe (code, pas IA) : applique les coûts unitaires aux
-  corridors produits par l'agrégation → budget total chiffré et défendable.
+- [x] ~~Table de coûts unitaires configurable par l'admin (coût/km de ligne, coût/abribus,
+  coût/heure-véhicule, etc.)~~ — corrigé (22 juin). Table `budget_costs` (migration
+  `supabase/migrations/0005_budget_costs.sql`, RLS admin-only, seedée avec les mêmes
+  valeurs que `DEFAULT_UNIT_COSTS`), lue/écrite via `src/lib/budget/storage.ts`
+  (`getBudgetCosts`/`saveBudgetCosts`, repli en mémoire si la table est absente ou la
+  requête échoue). Éditable depuis le nouvel onglet "Budget" de `AdminSimulator.tsx`.
+  ⚠️ Valeurs de départ illustratives (ordre de grandeur municipal canadien), pas des
+  références validées pour Moncton/N.-B. — voir section Risques, "Coûts unitaires
+  réels". **Migration 0005 pas encore exécutée en production**, même processus manuel
+  que 0004 (aucun accès CLI/identifiants Supabase depuis cet environnement).
+- [x] ~~Moteur de calcul déterministe (code, pas IA) : applique les coûts unitaires aux
+  corridors produits par l'agrégation → budget total chiffré et défendable.~~ — corrigé
+  (22 juin). `src/lib/budget/index.ts::computeBudget()` — déterministe, aucune
+  génération IA : longueur de ligne active (km) × coût/km, arrêts/stations actifs ×
+  coût unitaire, flotte requise (issue du moteur d'achalandage) × coût/véhicule
+  (→ immobilisations) ; heures-véhicule/an (flotte × 16h/jour × 312 jours/an,
+  hypothèses documentées) × coût/heure-véhicule (→ exploitation annuelle). Affiché
+  dans le nouvel onglet "Budget" de `AdminSimulator.tsx` avec détail des lignes,
+  total Année 1, et bannière d'avertissement sur le caractère illustratif des coûts.
 
 **Livrable de fin de semaine :** l'admin peut nourrir la base de connaissances,
-et un budget calculé existe pour n'importe quelle carte synthétisée.
+et un budget calculé existe pour n'importe quelle carte synthétisée. *(Moteur de
+budget + coûts unitaires faits ; upload de documents + pipeline d'embedding RAG
+restent à faire — nécessite un choix de fournisseur d'embeddings avec l'admin.)*
 
 ---
 

@@ -13,6 +13,8 @@ import {
   computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
 } from '@/lib/equity'
 import { computeRidership, RidershipResult } from '@/lib/ridership'
+import { computeBudget, BudgetResult, UnitCost, DEFAULT_UNIT_COSTS } from '@/lib/budget'
+import { getBudgetCosts, saveBudgetCosts } from '@/lib/budget/storage'
 import { aggregate, AggregatedCorridor, AggregatedStop } from '@/lib/aggregation'
 import { getRoutes, getStops } from '@/lib/storage'
 import { getLang, ADMIN_T } from '@/lib/lang'
@@ -48,7 +50,7 @@ interface SimRoute {
   color: string
 }
 
-type TabId = 'simulation' | 'achalandage' | 'scenarios' | 'od' | 'equite'
+type TabId = 'simulation' | 'achalandage' | 'scenarios' | 'od' | 'equite' | 'budget'
 
 interface Scenario {
   id: string
@@ -712,6 +714,129 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
   )
 }
 
+// ─── Tab : Budget ─────────────────────────────────────────────────────────────
+
+function fmtMoney(n: number): string {
+  return Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
+function TabBudget({
+  budgetResult, costs, onCostChange, onSave, saving, saveError,
+}: {
+  budgetResult: BudgetResult | null
+  costs: UnitCost[]
+  onCostChange: (id: string, value: number) => void
+  onSave: () => void
+  saving: boolean
+  saveError: boolean
+}) {
+  const t = ADMIN_T[getLang()]
+
+  if (!budgetResult) {
+    return (
+      <div className="sim-tab-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 120 }}>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.8rem' }}>{t.simLoadBudget}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="sim-tab-content">
+
+      {/* ── Total ── */}
+      <div className="sim-total-card">
+        <div className="sim-total-value">{fmtMoney(budgetResult.grandTotalYear1)} $</div>
+        <div className="sim-total-label">{t.budgetYear1Total}</div>
+      </div>
+
+      <div style={{
+        margin: '8px 0 12px', padding: '8px 10px', borderRadius: 8,
+        background: 'rgba(243,156,18,0.08)', border: '1px solid rgba(243,156,18,0.2)',
+        fontSize: '0.68rem', color: '#f39c12', lineHeight: 1.5,
+      }}>
+        {t.budgetEstimateWarn}
+      </div>
+
+      {/* ── Capital ── */}
+      <p className="sim-section-title">{t.budgetCapital}</p>
+      <div className="sim-ridership-list">
+        {budgetResult.capitalItems.map(item => (
+          <div key={item.id} className="sim-ridership-item">
+            <div className="sim-ridership-header">
+              <span className="sim-ridership-name">{item.label}</span>
+              <span className="sim-ridership-count">{fmtMoney(item.total)} $</span>
+            </div>
+            <div className="rid-route-meta">
+              {item.quantity.toLocaleString()} {item.quantityUnit} × {fmtMoney(item.unitCost)} $
+            </div>
+          </div>
+        ))}
+        <div className="sim-ridership-item">
+          <div className="sim-ridership-header">
+            <strong style={{ fontSize: '0.78rem' }}>{t.budgetCapitalTotal}</strong>
+            <strong style={{ fontSize: '0.78rem' }}>{fmtMoney(budgetResult.capitalTotal)} $</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Exploitation annuelle ── */}
+      <p className="sim-section-title" style={{ marginTop: 14 }}>{t.budgetOperating}</p>
+      <div className="sim-ridership-list">
+        {budgetResult.operatingAnnual.map(item => (
+          <div key={item.id} className="sim-ridership-item">
+            <div className="sim-ridership-header">
+              <span className="sim-ridership-name">{item.label}</span>
+              <span className="sim-ridership-count">{fmtMoney(item.total)} $</span>
+            </div>
+            <div className="rid-route-meta">
+              {item.quantity.toLocaleString()} {item.quantityUnit} × {fmtMoney(item.unitCost)} $
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Coûts unitaires éditables ── */}
+      <p className="sim-section-title" style={{ marginTop: 14 }}>{t.budgetUnitCosts}</p>
+      <div className="sim-ridership-list">
+        {costs.map(c => (
+          <div key={c.id} className="sim-item-row">
+            <span className="sim-item-label" style={{ fontSize: '0.74rem' }}>{c.label}</span>
+            <input
+              type="number"
+              value={c.value}
+              onChange={e => onCostChange(c.id, Number(e.target.value))}
+              style={{
+                width: 90, padding: '4px 6px', borderRadius: 6,
+                border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)',
+                color: 'white', fontSize: '0.74rem', textAlign: 'right',
+              }}
+            />
+            <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', minWidth: 50 }}>{c.unit}</span>
+          </div>
+        ))}
+      </div>
+
+      {saveError && <span className="f4-error">{t.budgetSaveError}</span>}
+
+      <button
+        className="sim-btn"
+        style={{
+          width: '100%', marginTop: 10, background: 'rgba(255,215,0,0.1)',
+          border: '1px solid rgba(255,215,0,0.4)', color: '#FFD700', fontWeight: 700,
+        }}
+        onClick={onSave}
+        disabled={saving}
+      >
+        {saving ? t.budgetSaving : t.budgetSaveCosts}
+      </button>
+
+      <div style={{ fontSize: '0.60rem', color: 'rgba(255,255,255,0.18)', marginTop: 10 }}>
+        calc. {budgetResult.computeTimeMs} ms
+      </div>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -736,6 +861,10 @@ function AdminSimulator({ onLogout }: Props) {
   const [equityResult,    setEquityResult]   = useState<EquityResult | null>(null)
   const [ridershipResult, setRidershipResult] = useState<RidershipResult | null>(null)
   const [usingRealData,   setUsingRealData]   = useState(false)
+  const [budgetResult,    setBudgetResult]    = useState<BudgetResult | null>(null)
+  const [unitCosts,       setUnitCosts]       = useState<UnitCost[]>(DEFAULT_UNIT_COSTS)
+  const [savingCosts,     setSavingCosts]     = useState(false)
+  const [saveCostsError,  setSaveCostsError]  = useState(false)
   const counterRef      = useRef(100)
   const citizenRoutesRef = useRef<Array<{ points: [number, number][] }>>([])
   const seedStopsRef     = useRef<SimStop[]>(INIT_STOPS)
@@ -788,6 +917,17 @@ function AdminSimulator({ onLogout }: Props) {
     const result = computeRidership(routes, equityResult.scores, odMatrix, OD_ZONES, EQ_ZONES)
     setRidershipResult(result)
   }, [routes, equityResult, odMatrix])
+
+  // ── Coûts unitaires — chargés une seule fois au montage ──────────────────
+  useEffect(() => {
+    getBudgetCosts().then(setUnitCosts)
+  }, [])
+
+  // ── Budget — recalcul quand le réseau, l'achalandage ou les coûts changent ──
+  useEffect(() => {
+    const result = computeBudget(routes, stops, ridershipResult?.busesRequired ?? 0, unitCosts)
+    setBudgetResult(result)
+  }, [routes, stops, ridershipResult, unitCosts])
 
   const metrics     = computeMetrics(stops)
   const pct         = coverageResult?.coveragePct ?? metrics.coveragePct
@@ -900,12 +1040,25 @@ function AdminSimulator({ onLogout }: Props) {
     }))
   }, [stops, routes, coverageResult, ridershipResult])
 
+  const handleCostChange = useCallback((id: string, value: number) => {
+    setUnitCosts(prev => prev.map(c => c.id === id ? { ...c, value } : c))
+  }, [])
+
+  const handleSaveCosts = useCallback(() => {
+    setSaveCostsError(false)
+    setSavingCosts(true)
+    saveBudgetCosts(unitCosts)
+      .catch(err => { console.error('saveBudgetCosts failed', err); setSaveCostsError(true) })
+      .finally(() => setSavingCosts(false))
+  }, [unitCosts])
+
   const TABS: { id: TabId; label: string }[] = [
     { id: 'simulation',  label: t.simTabSim  },
     { id: 'achalandage', label: t.simTabAch  },
     { id: 'scenarios',   label: t.simTabScen },
     { id: 'od',          label: t.simTabOD   },
     { id: 'equite',      label: t.simTabEq   },
+    { id: 'budget',      label: t.simTabBudget },
   ]
 
   return (
@@ -1157,6 +1310,18 @@ function AdminSimulator({ onLogout }: Props) {
         {/* ── Onglet Équité ── */}
         {activeTab === 'equite' && (
           <TabEquite equityResult={equityResult} />
+        )}
+
+        {/* ── Onglet Budget ── */}
+        {activeTab === 'budget' && (
+          <TabBudget
+            budgetResult={budgetResult}
+            costs={unitCosts}
+            onCostChange={handleCostChange}
+            onSave={handleSaveCosts}
+            saving={savingCosts}
+            saveError={saveCostsError}
+          />
         )}
 
       </aside>
