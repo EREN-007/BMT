@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fireSubmissionConfirmation } from '@/lib/participation'
-import { clearMapDraft } from '@/pages/MapPage'
+import { clearMapDraft, PENDING_SUBMISSION_KEY } from '@/pages/MapPage'
+import { saveForm } from '@/lib/storage'
 import { getLang, FORM_T } from '@/lib/lang'
 
 interface FormData {
@@ -21,6 +22,8 @@ function Page4Form() {
   const [form, setForm]       = useState<FormData>(EMPTY)
   const [sent, setSent]       = useState(false)
   const [errors, setErrors]   = useState<Partial<FormData>>({})
+  const [saving, setSaving]       = useState(false)
+  const [saveError, setSaveError] = useState(false)
 
   const set = (field: keyof FormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -38,12 +41,29 @@ function Page4Form() {
     return Object.keys(e).length === 0
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) return
-    setSent(true)
-    clearMapDraft()
-    void fireSubmissionConfirmation(lang)
+
+    setSaveError(false)
+    setSaving(true)
+    try {
+      // Rattache le formulaire à la soumission (routes/stops) créée par MapPage —
+      // absente seulement si /page4 a été atteinte sans passer par le dessin.
+      const submissionId = sessionStorage.getItem(PENDING_SUBMISSION_KEY)
+      if (submissionId) {
+        await saveForm(submissionId, { ...form })
+        sessionStorage.removeItem(PENDING_SUBMISSION_KEY)
+      }
+      setSent(true)
+      clearMapDraft()
+      void fireSubmissionConfirmation(lang)
+    } catch (err) {
+      console.error('saveForm failed', err)
+      setSaveError(true)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (sent) {
@@ -154,7 +174,9 @@ function Page4Form() {
             />
           </div>
 
-          <button className="f4-submit" type="submit">
+          {saveError && <span className="f4-error">{t.saveError}</span>}
+
+          <button className="f4-submit" type="submit" disabled={saving}>
             <span>{t.send}</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="22" y1="2" x2="11" y2="13"/>

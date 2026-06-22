@@ -675,7 +675,11 @@ function TabOD({ odMatrix }: { odMatrix: ODMatrix | null }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-function AdminSimulator() {
+interface Props {
+  onLogout: () => void
+}
+
+function AdminSimulator({ onLogout }: Props) {
   const navigate = useNavigate()
   const lang     = getLang()
   const t        = ADMIN_T[lang]
@@ -821,7 +825,7 @@ function AdminSimulator() {
             </svg>
           </a>
         </nav>
-        <button className="db-logout" style={{ padding:'8px 6px', marginTop:'auto', gap:0 }} onClick={() => navigate('/')}>
+        <button className="db-logout" style={{ padding:'8px 6px', marginTop:'auto', gap:0 }} onClick={onLogout}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:16,height:16}}>
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
             <polyline points="16 17 21 12 16 7"/>

@@ -11,7 +11,7 @@ import { getOrCreateUserId } from './auth'
 export async function saveSubmission(input: {
   routes: Array<{ points: [number, number][]; color: string }>
   stops:  Array<{ pos: [number, number]; type: 'busstop' | 'station'; label: string }>
-}): Promise<void> {
+}): Promise<{ submissionId: string }> {
   const userId = await getOrCreateUserId()
 
   const { data: submission, error: subErr } = await supabase
@@ -34,6 +34,22 @@ export async function saveSubmission(input: {
     )
     if (error) throw error
   }
+
+  return { submissionId: submission.id }
+}
+
+// ─── Formulaire (Page4Form) ──────────────────────────────────────────────────
+// Rattaché à la soumission créée par saveSubmission (mêmes routes/stops que ce
+// que le citoyen vient de dessiner) — pas une soumission séparée.
+
+export async function saveForm(
+  submissionId: string,
+  answers: Record<string, string>,
+): Promise<void> {
+  const { error } = await supabase
+    .from('forms')
+    .insert({ submission_id: submissionId, answers })
+  if (error) throw error
 }
 
 // ─── Lecture ─────────────────────────────────────────────────────────────────

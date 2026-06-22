@@ -110,6 +110,7 @@ export const FORM_T = {
     labelSuggestion:'Suggestion',
     labelSuggestionSub:'Suggestion',
     placeholderSuggestion:'Décrivez votre suggestion de ligne de bus… / Describe your bus route suggestion…',
+    saveError:    "Impossible d'envoyer vos informations — vérifiez votre connexion et réessayez.",
   },
   en: {
     title:        'Your information',
@@ -133,6 +134,36 @@ export const FORM_T = {
     labelSuggestion:'Suggestion',
     labelSuggestionSub:'Suggestion',
     placeholderSuggestion:'Describe your bus route suggestion… / Décrivez votre suggestion de ligne de bus…',
+    saveError:    'Could not send your information — check your connection and try again.',
+  },
+}
+
+export const POSTAL_T = {
+  fr: {
+    title:        'Votre code postal',
+    subtitle:     'Your postal code',
+    instr:        'BMT est réservé aux citoyens du Grand Moncton (Moncton, Riverview, Dieppe).',
+    label:        'Code postal',
+    labelSub:     'Postal code',
+    placeholder:  'E1A 1A1',
+    required:     'Requis',
+    invalidFormat:'Format invalide (ex. E1A 1A1)',
+    outOfZone:    "Désolé, BMT est réservé aux résidents du Grand Moncton pour l'instant.",
+    outOfZoneSub: 'Sorry, BMT is currently limited to Greater Moncton residents.',
+    continue:     'Continuer / Continue',
+  },
+  en: {
+    title:        'Your postal code',
+    subtitle:     'Votre code postal',
+    instr:        'BMT is limited to Greater Moncton citizens (Moncton, Riverview, Dieppe).',
+    label:        'Postal code',
+    labelSub:     'Code postal',
+    placeholder:  'E1A 1A1',
+    required:     'Required',
+    invalidFormat:'Invalid format (e.g. E1A 1A1)',
+    outOfZone:    'Sorry, BMT is currently limited to Greater Moncton residents.',
+    outOfZoneSub: "Désolé, BMT est réservé aux résidents du Grand Moncton pour l'instant.",
+    continue:     'Continue / Continuer',
   },
 }
 
