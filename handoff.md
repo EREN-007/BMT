@@ -234,11 +234,16 @@ superposés.
   `DEFAULT_ROUTES`/`FINAL_STOPS` si absent/invalide/vide) et affiche un badge visible
   ("● Basée sur les soumissions citoyennes réelles" / "○ Exemple de démonstration")
   pour que l'admin sache toujours si ce qu'il regarde est réel ou fictif.
-- [ ] Pas de garde-fou serveur sur le nombre de points par tracé ni les bornes
-  géographiques (`routes.points`) — repris de la checklist Sécurité, toujours pas fait.
-  Pertinent maintenant que de vraies soumissions arrivent.
-- [ ] Pas de rate limiting sur `saveSubmission`/`saveForm` — un citoyen (ou un script)
-  peut soumettre un nombre illimité de fois.
+- [~] Garde-fou serveur sur le nombre de points/bornes géographiques + rate limiting —
+  migration écrite (`supabase/migrations/0004_input_guardrails.sql`) : contraintes
+  `check` sur `routes.points` (2 à 500 points, lat/lng dans une bbox Grand Moncton avec
+  marge) et `stops.pos` (même bbox), trigger `enforce_submission_rate_limit()` qui
+  bloque un `user_id` au-delà de 30 soumissions/heure. **Pas encore exécutée en
+  production** — aucun accès CLI/identifiants Supabase depuis cet environnement, à
+  exécuter manuellement dans le SQL Editor Supabase (même processus que 0001-0003)
+  avant de cocher cet écart comme résolu. Limite connue : le rate limit est par
+  `user_id` seulement, pas par IP — contournable en créant plusieurs sessions
+  anonymes, acceptable pour l'instant mais à garder en tête.
 
 ---
 
