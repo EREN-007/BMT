@@ -2,16 +2,21 @@
 // Déployée manuellement (pas d'accès CLI/identifiants Supabase depuis l'environnement
 // de développement) :
 //   supabase functions deploy generate-report
-//   supabase secrets set ANTHROPIC_API_KEY=...
+//   supabase secrets set XAI_API_KEY=...
 //
 // Deux modes, un seul endpoint (même récupération de données + RAG sous-jacente) :
 //   - mode "report"   : rapport structuré complet (résumé, analyses, recommandations)
 //   - mode "question" : panneau "assistant IA" admin (semaine 4, item 3) — Q/R libre
 //
+// LLM : xAI Grok (api.x.ai, API REST compatible OpenAI — pas de SDK officiel Deno/ESM,
+// donc appel via fetch direct). Modèle configurable par la variable d'env GROK_MODEL
+// (défaut "grok-4.3", le modèle phare xAI au moment de l'écriture — ajuster si xAI
+// renomme/déprécie sans redéployer le code, cf. https://docs.x.ai/developers/models).
+//
 // Important (handoff.md, checklist Sécurité) :
 //   - Les CHIFFRES (achalandage, équité, OD, budget) sont calculés côté client de façon
 //     déterministe (src/lib/ridership, equity, od, budget) et simplement transmis ici —
-//     Claude ne les invente jamais, il ne fait QUE rédiger l'analyse narrative autour.
+//     le modèle ne les invente jamais, il ne fait QUE rédiger l'analyse narrative autour.
 //   - Le corpus RAG est injecté comme texte de référence, jamais comme instructions —
 //     un document contenant des instructions cachées ne doit pas influencer l'agent
 //     (cf. handoff.md, test "injection de prompt" prévu en semaine de polish).
@@ -19,13 +24,14 @@
 //     ou de soumission individuelle, donc pas de donnée personnelle identifiable.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import Anthropic from 'https://esm.sh/@anthropic-ai/sdk'
 
 const EMBEDDING_DIM = 1024
 const JINA_URL = 'https://api.jina.ai/v1/embeddings'
 const JINA_API_KEY = Deno.env.get('JINA_API_KEY') ?? ''
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
-const MODEL = 'claude-opus-4-8'
+
+const XAI_API_KEY = Deno.env.get('XAI_API_KEY') ?? ''
+const XAI_URL = 'https://api.x.ai/v1/chat/completions'
+const MODEL = Deno.env.get('GROK_MODEL') ?? 'grok-4.3'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -115,6 +121,60 @@ function userPrompt(dataBlock: string, corpusBlock: string, question?: string): 
   return `${base}\n\nProduis le rapport structuré demandé.`
 }
 
+// Retire un éventuel bloc markdown ```json ... ``` autour de la réponse — utile pour le
+// chemin de repli (sans response_format) où le modèle n'est pas contraint à du JSON pur.
+function stripCodeFence(text: string): string {
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  return (match ? match[1] : text).trim()
+}
+
+async function callGrokJSON(systemPrompt: string, userContent: string, schemaName: string, schema: Record<string, unknown>): Promise<unknown> {
+  const baseBody = {
+    model: MODEL,
+    max_tokens: 4096,
+    temperature: 0.3,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ],
+  }
+
+  // Tentative 1 : sortie structurée contrainte (API compatible OpenAI — response_format
+  // json_schema). Si xAI rejette le paramètre (modèle/version qui ne le supporte pas),
+  // on retombe sur une instruction système stricte + parsing tolérant.
+  let res = await fetch(XAI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${XAI_API_KEY}` },
+    body: JSON.stringify({
+      ...baseBody,
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: schemaName, strict: true, schema },
+      },
+    }),
+  })
+
+  if (!res.ok && (res.status === 400 || res.status === 422)) {
+    res = await fetch(XAI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${XAI_API_KEY}` },
+      body: JSON.stringify({
+        ...baseBody,
+        messages: [
+          { role: 'system', content: `${systemPrompt}\n\nRéponds STRICTEMENT avec un objet JSON valide conforme à ce schéma (aucun texte avant/après, pas de bloc markdown) :\n${JSON.stringify(schema)}` },
+          { role: 'user', content: userContent },
+        ],
+      }),
+    })
+  }
+
+  if (!res.ok) throw new Error(`xAI API ${res.status}: ${await res.text()}`)
+  const out = await res.json()
+  const content = out.choices?.[0]?.message?.content
+  if (!content) throw new Error('réponse Grok sans contenu')
+  return JSON.parse(stripCodeFence(content))
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -146,7 +206,6 @@ Deno.serve(async req => {
   }
 
   const admin = createClient(supabaseUrl, serviceKey)
-  const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
 
   try {
     const dataBlock = JSON.stringify(body.data, null, 2)
@@ -165,25 +224,11 @@ Deno.serve(async req => {
     const chunks = (matches ?? []) as MatchedChunk[]
     const corpusBlock = buildCorpusBlock(chunks)
 
-    const schema = mode === 'question' ? ANSWER_SCHEMA : REPORT_SCHEMA
+    const schemaName = mode === 'question' ? 'assistant_answer' : 'transit_report'
+    const schema     = mode === 'question' ? ANSWER_SCHEMA : REPORT_SCHEMA
+    const content    = userPrompt(dataBlock, corpusBlock, mode === 'question' ? body.question : undefined)
 
-    const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 4096,
-      thinking: { type: 'adaptive' },
-      output_config: {
-        effort: 'medium',
-        format: { type: 'json_schema', schema },
-      },
-      system: SYSTEM_PROMPT,
-      messages: [
-        { role: 'user', content: userPrompt(dataBlock, corpusBlock, mode === 'question' ? body.question : undefined) },
-      ],
-    })
-
-    const textBlock = response.content.find((b: { type: string }) => b.type === 'text') as { text: string } | undefined
-    if (!textBlock) throw new Error('réponse Claude sans contenu texte')
-    const parsed = JSON.parse(textBlock.text)
+    const parsed = await callGrokJSON(SYSTEM_PROMPT, content, schemaName, schema) as Record<string, unknown>
 
     const sources = chunks.map(c => ({
       document_title: c.document_title,

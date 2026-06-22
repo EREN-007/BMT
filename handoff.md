@@ -329,9 +329,13 @@ pour le rapport, ou la question de l'admin) et l'embed via Jina (`retrieval.quer
 `supabase/migrations/0007_match_document_chunks.sql` — similarité cosinus pgvector,
 exécution restreinte à `service_role`, le corpus admin ne doit pas être lisible par un
 citoyen via RPC direct) pour récupérer les passages pertinents du corpus ; 3) appelle
-Claude (`claude-opus-4-8`, `thinking: {type:'adaptive'}`, sortie forcée en JSON via
-`output_config.format` — pas de prefill, cf. doc API à jour) avec les VRAIES données
-calculées (chiffres jamais générés par le modèle, seulement commentés) + le corpus comme
+xAI Grok (`api.x.ai/v1/chat/completions`, API REST compatible OpenAI, pas de SDK
+officiel Deno/ESM donc appel via `fetch` direct ; modèle configurable par la variable
+d'env `GROK_MODEL`, défaut `grok-4.3`), sortie forcée en JSON via `response_format:
+{type:'json_schema', json_schema:{strict:true,...}}` avec repli automatique (si l'API
+rejette le paramètre avec un 400/422, ré-essai sans `response_format` en injectant le
+schéma dans le prompt système puis parsing tolérant des blocs ```json```) avec les VRAIES
+données calculées (chiffres jamais générés par le modèle, seulement commentés) + le corpus comme
 texte de référence explicitement non-instructif (mitigation injection de prompt, cf.
 checklist Sécurité). Le résumé envoyé au modèle (`src/lib/report/types.ts::ReportSummary`,
 construit par `src/lib/report/index.ts::buildReportSummary`) est agrégé — zones, lignes,
@@ -346,8 +350,8 @@ Mapbox intégrée) — actuellement le rapport n'est consultable que dans le pan
 pas exportable.
 Action manuelle requise : exécuter la migration 0007, déployer l'Edge Function
 `generate-report` (`supabase functions deploy generate-report`) et attacher un NOUVEAU
-secret `ANTHROPIC_API_KEY` (`supabase secrets set ANTHROPIC_API_KEY=...`), distinct de
-`JINA_API_KEY` — à obtenir sur console.anthropic.com. Cette fonction réutilise aussi
+secret `XAI_API_KEY` (`supabase secrets set XAI_API_KEY=...`), distinct de
+`JINA_API_KEY` — à obtenir sur la console xAI (x.ai). Cette fonction réutilise aussi
 `JINA_API_KEY` (déjà configuré en semaine 3) pour l'embedding de la requête de recherche.)*
 
 **Livrable de fin de semaine :** un rapport complet généré automatiquement à partir
