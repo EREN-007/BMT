@@ -250,11 +250,31 @@ superposés.
 
 **But : poser les fondations du "cerveau" — base de connaissances + moteur de coûts.**
 
-- [ ] Interface admin d'upload de documents de référence (PDF, vidéo, lien, HTML, image)
-  vers Supabase Storage.
-- [ ] Pipeline d'embedding : extraction de texte (PDF/HTML) → embeddings → stockage
+- [x] ~~Interface admin d'upload de documents de référence (PDF, vidéo, lien, HTML, image)
+  vers Supabase Storage.~~ — corrigé (22 juin). Nouvelle page `AdminDocuments.tsx`
+  (`/documents`) : formulaire d'ajout (pdf/image → upload vers le bucket Storage
+  `documents` ; lien → URL ; vidéo → titre + description, pas de transcription en
+  phase 1) et table listant les documents avec statut (`pending`/`processing`/`done`/
+  `error`), rafraîchie automatiquement toutes les 3s tant qu'un document est en cours
+  de traitement. Lien ajouté dans la nav de toutes les pages admin.
+- [x] ~~Pipeline d'embedding : extraction de texte (PDF/HTML) → embeddings → stockage
   `pgvector`. (Vidéo/image : transcription/description avant embedding, ou métadonnée
-  simple en phase 1 si le temps manque.)
+  simple en phase 1 si le temps manque.)~~ — corrigé (22 juin). Edge Function
+  `supabase/functions/process-document/index.ts` : pdf/image envoyés en base64
+  directement à Jina (embedding multimodal natif, pas d'OCR séparé) ; lien/html
+  récupéré côté serveur puis nettoyé (`htmlToText`) et découpé en chunks de ~3000
+  caractères ; vidéo embedée à partir de la description saisie par l'admin (phase 1,
+  pas de transcription). Embeddings stockés dans `document_chunks` (colonne
+  `pgvector`, dimension 1024) via la migration `supabase/migrations/0006_documents_rag.sql`
+  (active l'extension `vector`, crée le bucket Storage `documents`, RLS admin-only).
+  Fournisseur retenu : **Jina AI** (`jina-embeddings-v4`) — gratuit jusqu'à 1M tokens/
+  mois, sans carte de crédit, multilingue (fr/en) et multimodal natif. **Ni la
+  migration 0006 ni l'Edge Function ne sont déployées en production** — aucun accès
+  CLI/identifiants Supabase depuis cet environnement ; à faire manuellement :
+  1) exécuter `0006_documents_rag.sql` dans le SQL Editor (après 0005), 2) déployer
+  la fonction (`supabase functions deploy process-document`), 3) définir le secret
+  (`supabase secrets set JINA_API_KEY=...`). Recherche par similarité (utilisée par
+  l'agent IA) volontairement pas encore implémentée — prévue semaine 4 avec l'agent.
 - [x] ~~Table de coûts unitaires configurable par l'admin (coût/km de ligne, coût/abribus,
   coût/heure-véhicule, etc.)~~ — corrigé (22 juin). Table `budget_costs` (migration
   `supabase/migrations/0005_budget_costs.sql`, RLS admin-only, seedée avec les mêmes
@@ -276,9 +296,12 @@ superposés.
   total Année 1, et bannière d'avertissement sur le caractère illustratif des coûts.
 
 **Livrable de fin de semaine :** l'admin peut nourrir la base de connaissances,
-et un budget calculé existe pour n'importe quelle carte synthétisée. *(Moteur de
-budget + coûts unitaires faits ; upload de documents + pipeline d'embedding RAG
-restent à faire — nécessite un choix de fournisseur d'embeddings avec l'admin.)*
+et un budget calculé existe pour n'importe quelle carte synthétisée. *(Tout le code
+des 4 items est écrit et type-check/build proprement. Reste une action manuelle de
+l'admin pour activer la base de connaissances en production : exécuter la migration
+0006, déployer l'Edge Function `process-document` et y attacher le secret
+`JINA_API_KEY` — voir détails ci-dessus. Le moteur de budget, lui, est déjà
+opérationnel dès que la migration 0005 est appliquée.)*
 
 ---
 

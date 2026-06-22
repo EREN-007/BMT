@@ -96,6 +96,14 @@ function AdminDashboard({ onLogout }: Props) {
             </svg>
             {t.navSim}
           </a>
+          <a className="db-nav-item" onClick={() => navigate('/documents')} style={{cursor:'pointer'}}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+            </svg>
+            {t.navDocs}
+          </a>
           <a className="db-nav-item" href="#">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>

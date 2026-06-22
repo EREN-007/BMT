@@ -8,6 +8,7 @@ import AdminDashboard  from '@/pages/AdminDashboard'
 import AdminMapPage    from '@/pages/AdminMapPage'
 import AdminSimulator  from '@/pages/AdminSimulator'
 import AdminFinalMap   from '@/pages/AdminFinalMap'
+import AdminDocuments  from '@/pages/AdminDocuments'
 
 function AdminApp() {
   const navigate = useNavigate()
@@ -44,6 +45,7 @@ function AdminApp() {
       <Route path="/carte"        element={guard(<AdminMapPage onLogout={handleLogout} />)} />
       <Route path="/simulateur"   element={guard(<AdminSimulator onLogout={handleLogout} />)} />
       <Route path="/carte-finale" element={guard(<AdminFinalMap onLogout={handleLogout} />)} />
+      <Route path="/documents"    element={guard(<AdminDocuments onLogout={handleLogout} />)} />
       <Route path="*"             element={<Navigate to="/" replace />} />
     </Routes>
   )
