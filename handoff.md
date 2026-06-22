@@ -309,7 +309,7 @@ opérationnel dès que la migration 0005 est appliquée.)*
 
 **But : l'agent IA produit une étude complète, prête à présenter.**
 
-- [ ] Edge Function (ou petit service serveur) orchestrant l'agent Claude :
+- [x] Edge Function (ou petit service serveur) orchestrant l'agent Claude :
   1. Récupère les données agrégées réelles (corridors, équité, matrice OD).
   2. Récupère les passages pertinents du corpus RAG (méthodologie transit planning).
   3. Produit une analyse structurée (achalandage potentiel, lacunes d'équité,
@@ -318,8 +318,37 @@ opérationnel dès que la migration 0005 est appliquée.)*
   5. Génère un rapport narratif autour des chiffres réels.
 - [ ] Template de rapport final (PDF/HTML) : résumé exécutif, carte du réseau (réutilise
   le rendu Mapbox existant), analyse d'équité, ventilation budgétaire, recommandations.
-- [ ] Panneau "assistant IA" côté admin : poser une question ("si on change ceci...")
+- [x] Panneau "assistant IA" côté admin : poser une question ("si on change ceci...")
   et recevoir un commentaire généré à partir des données + du corpus.
+
+*(Implémentation : `supabase/functions/generate-report/index.ts` — Edge Function unique
+qui sert les deux items ci-dessus avec deux modes (`mode: 'report'` / `mode: 'question'`)
+puisqu'ils partagent la même logique : 1) calcule une requête de recherche (synthétisée
+pour le rapport, ou la question de l'admin) et l'embed via Jina (`retrieval.query`) ;
+2) appelle la fonction RPC `match_document_chunks` (nouvelle migration
+`supabase/migrations/0007_match_document_chunks.sql` — similarité cosinus pgvector,
+exécution restreinte à `service_role`, le corpus admin ne doit pas être lisible par un
+citoyen via RPC direct) pour récupérer les passages pertinents du corpus ; 3) appelle
+Claude (`claude-opus-4-8`, `thinking: {type:'adaptive'}`, sortie forcée en JSON via
+`output_config.format` — pas de prefill, cf. doc API à jour) avec les VRAIES données
+calculées (chiffres jamais générés par le modèle, seulement commentés) + le corpus comme
+texte de référence explicitement non-instructif (mitigation injection de prompt, cf.
+checklist Sécurité). Le résumé envoyé au modèle (`src/lib/report/types.ts::ReportSummary`,
+construit par `src/lib/report/index.ts::buildReportSummary`) est agrégé — zones, lignes,
+corridors — jamais de tracé/soumission individuelle.
+Côté admin, un nouvel onglet "Rapport IA" dans `AdminSimulator.tsx` (`TabReport`) déclenche
+la génération et affiche le résumé exécutif, les analyses, le score de connectivité, les
+recommandations et les sources du corpus utilisées, plus un encadré "assistant IA" en bas
+de l'onglet pour les questions libres — ce dernier couvre déjà l'item "Panneau assistant
+IA" même si la présentation reste simple (liste de texte, pas de mise en page soignée).
+Reste à faire : le template de rapport PDF/HTML imprimable avec mise en page (carte
+Mapbox intégrée) — actuellement le rapport n'est consultable que dans le panneau admin,
+pas exportable.
+Action manuelle requise : exécuter la migration 0007, déployer l'Edge Function
+`generate-report` (`supabase functions deploy generate-report`) et attacher un NOUVEAU
+secret `ANTHROPIC_API_KEY` (`supabase secrets set ANTHROPIC_API_KEY=...`), distinct de
+`JINA_API_KEY` — à obtenir sur console.anthropic.com. Cette fonction réutilise aussi
+`JINA_API_KEY` (déjà configuré en semaine 3) pour l'embedding de la requête de recherche.)*
 
 **Livrable de fin de semaine :** un rapport complet généré automatiquement à partir
 d'une carte synthétisée, avec analyse experte et budget chiffré.

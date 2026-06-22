@@ -15,10 +15,11 @@ import {
 import { computeRidership, RidershipResult } from '@/lib/ridership'
 import { computeBudget, BudgetResult, UnitCost, DEFAULT_UNIT_COSTS } from '@/lib/budget'
 import { getBudgetCosts, saveBudgetCosts } from '@/lib/budget/storage'
-import { aggregate, AggregatedCorridor, AggregatedStop } from '@/lib/aggregation'
+import { aggregate, AggregatedCorridor, AggregatedStop, AggregationResult } from '@/lib/aggregation'
 import { getRoutes, getStops } from '@/lib/storage'
 import { getLang, ADMIN_T } from '@/lib/lang'
 import { FinalRoute, FinalStop, FINAL_STATE_KEY } from '@/lib/finalState'
+import { buildReportSummary, generateReport, askAssistant, ReportResult, AssistantAnswer } from '@/lib/report'
 
 const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
 const MB_STYLE  = `https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=${MB_TOKEN}`
@@ -50,7 +51,7 @@ interface SimRoute {
   color: string
 }
 
-type TabId = 'simulation' | 'achalandage' | 'scenarios' | 'od' | 'equite' | 'budget'
+type TabId = 'simulation' | 'achalandage' | 'scenarios' | 'od' | 'equite' | 'budget' | 'rapport'
 
 interface Scenario {
   id: string
@@ -837,6 +838,141 @@ function TabBudget({
   )
 }
 
+// ─── Tab : Rapport IA (agent generate-report, semaine 4) ──────────────────────
+
+function TabReport({
+  canGenerate, report, reportLoading, reportError, onGenerate,
+  question, onQuestionChange, answer, askLoading, askError, onAsk,
+}: {
+  canGenerate: boolean
+  report: ReportResult | null
+  reportLoading: boolean
+  reportError: boolean
+  onGenerate: () => void
+  question: string
+  onQuestionChange: (v: string) => void
+  answer: AssistantAnswer | null
+  askLoading: boolean
+  askError: boolean
+  onAsk: () => void
+}) {
+  const t = ADMIN_T[getLang()]
+
+  return (
+    <div className="sim-tab-content">
+
+      <button
+        className="sim-btn"
+        style={{
+          width: '100%', background: 'rgba(255,215,0,0.1)',
+          border: '1px solid rgba(255,215,0,0.4)', color: '#FFD700', fontWeight: 700,
+        }}
+        onClick={onGenerate}
+        disabled={!canGenerate || reportLoading}
+      >
+        {reportLoading ? t.reportGenerating : t.reportGenerate}
+      </button>
+
+      {reportError && (
+        <div style={{
+          marginTop: 8, padding: '6px 10px', borderRadius: 6,
+          background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.2)',
+          fontSize: '0.70rem', color: '#e74c3c',
+        }}>
+          {t.reportError}
+        </div>
+      )}
+
+      {!report && !reportLoading && !reportError && (
+        <p style={{ marginTop: 12, color: 'rgba(255,255,255,0.35)', fontSize: '0.78rem' }}>{t.reportEmpty}</p>
+      )}
+
+      {report && (
+        <>
+          <div className="sim-total-card" style={{ marginTop: 12 }}>
+            <div className="sim-total-value">{report.narrative.connectivity_score}/100</div>
+            <div className="sim-total-label">{t.reportConnectivity}</div>
+          </div>
+
+          {([
+            ['reportExecSummary',     report.narrative.executive_summary],
+            ['reportRidership',       report.narrative.ridership_analysis],
+            ['reportEquity',          report.narrative.equity_analysis],
+            ['reportConnectivity',    report.narrative.connectivity_analysis],
+            ['reportIndustry',        report.narrative.industry_comparison],
+            ['reportBudgetNarrative', report.narrative.budget_narrative],
+          ] as const).map(([key, text]) => (
+            <div key={key} style={{ marginTop: 12 }}>
+              <p className="sim-section-title">{t[key]}</p>
+              <p style={{ fontSize: '0.78rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.8)' }}>{text}</p>
+            </div>
+          ))}
+
+          <p className="sim-section-title" style={{ marginTop: 12 }}>{t.reportRecommendations}</p>
+          <div className="sim-ridership-list">
+            {report.narrative.recommendations.map((rec, i) => (
+              <div key={i} className="sim-ridership-item">
+                <span style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>{rec}</span>
+              </div>
+            ))}
+          </div>
+
+          <p className="sim-section-title" style={{ marginTop: 12 }}>{t.reportSources}</p>
+          {report.sources.length === 0 ? (
+            <p style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.35)' }}>{t.reportNoSources}</p>
+          ) : (
+            <div className="sim-ridership-list">
+              {report.sources.map((s, i) => (
+                <div key={i} className="sim-item-row">
+                  <span className="sim-item-label" style={{ fontSize: '0.74rem' }}>{s.document_title}</span>
+                  <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)' }}>{Math.round(s.similarity * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontSize: '0.60rem', color: 'rgba(255,255,255,0.18)', marginTop: 10 }}>
+            {new Date(report.generatedAt).toLocaleString()}
+          </div>
+        </>
+      )}
+
+      {/* ── Assistant IA — Q/R libre ── */}
+      <p className="sim-section-title" style={{ marginTop: 18 }}>{t.reportAskTitle}</p>
+      <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', marginBottom: 8 }}>{t.reportAskSub}</p>
+      <textarea
+        className="f4-textarea"
+        placeholder={t.reportAskPlaceholder}
+        value={question}
+        onChange={e => onQuestionChange(e.target.value)}
+        rows={3}
+      />
+      <button
+        className="sim-btn"
+        style={{ width: '100%', marginTop: 8 }}
+        onClick={onAsk}
+        disabled={!canGenerate || askLoading || !question.trim()}
+      >
+        {askLoading ? t.reportAskLoading : t.reportAskButton}
+      </button>
+      {askError && <span className="f4-error">{t.reportAskError}</span>}
+      {answer && (
+        <div style={{
+          marginTop: 8, padding: '8px 10px', borderRadius: 8,
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+        }}>
+          <p style={{ fontSize: '0.78rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>{answer.answer}</p>
+          {answer.sources.length > 0 && (
+            <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', marginTop: 6 }}>
+              {t.reportSources} : {answer.sources.map(s => s.document_title).join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -865,6 +1001,14 @@ function AdminSimulator({ onLogout }: Props) {
   const [unitCosts,       setUnitCosts]       = useState<UnitCost[]>(DEFAULT_UNIT_COSTS)
   const [savingCosts,     setSavingCosts]     = useState(false)
   const [saveCostsError,  setSaveCostsError]  = useState(false)
+  const [aggResult,       setAggResult]       = useState<AggregationResult | null>(null)
+  const [report,          setReport]          = useState<ReportResult | null>(null)
+  const [reportLoading,   setReportLoading]   = useState(false)
+  const [reportError,     setReportError]     = useState(false)
+  const [question,        setQuestion]        = useState('')
+  const [answer,          setAnswer]          = useState<AssistantAnswer | null>(null)
+  const [askLoading,      setAskLoading]      = useState(false)
+  const [askError,        setAskError]        = useState(false)
   const counterRef      = useRef(100)
   const citizenRoutesRef = useRef<Array<{ points: [number, number][] }>>([])
   const seedStopsRef     = useRef<SimStop[]>(INIT_STOPS)
@@ -890,6 +1034,7 @@ function AdminSimulator({ onLogout }: Props) {
     Promise.all([getRoutes(), getStops()]).then(([citizenRoutes, citizenStops]) => {
       citizenRoutesRef.current = citizenRoutes
       const agg        = aggregate(citizenRoutes, citizenStops)
+      setAggResult(agg)
       const realRoutes  = seedRoutesFromCorridors(agg.corridors)
       const realStops   = seedStopsFromAggregated(agg.stops)
       if (realRoutes.length === 0 && realStops.length === 0) return
@@ -1052,6 +1197,36 @@ function AdminSimulator({ onLogout }: Props) {
       .finally(() => setSavingCosts(false))
   }, [unitCosts])
 
+  const canGenerateReport = !!(equityResult && odMatrix && ridershipResult && budgetResult && aggResult)
+
+  const handleGenerateReport = useCallback(() => {
+    if (!equityResult || !odMatrix || !ridershipResult || !budgetResult || !aggResult) return
+    setReportError(false)
+    setReportLoading(true)
+    const summary = buildReportSummary({
+      ridership: ridershipResult, equity: equityResult, od: odMatrix,
+      budget: budgetResult, aggregation: aggResult,
+    })
+    generateReport(summary)
+      .then(setReport)
+      .catch(err => { console.error('generateReport failed', err); setReportError(true) })
+      .finally(() => setReportLoading(false))
+  }, [equityResult, odMatrix, ridershipResult, budgetResult, aggResult])
+
+  const handleAsk = useCallback(() => {
+    if (!equityResult || !odMatrix || !ridershipResult || !budgetResult || !aggResult || !question.trim()) return
+    setAskError(false)
+    setAskLoading(true)
+    const summary = buildReportSummary({
+      ridership: ridershipResult, equity: equityResult, od: odMatrix,
+      budget: budgetResult, aggregation: aggResult,
+    })
+    askAssistant(summary, question.trim())
+      .then(setAnswer)
+      .catch(err => { console.error('askAssistant failed', err); setAskError(true) })
+      .finally(() => setAskLoading(false))
+  }, [equityResult, odMatrix, ridershipResult, budgetResult, aggResult, question])
+
   const TABS: { id: TabId; label: string }[] = [
     { id: 'simulation',  label: t.simTabSim  },
     { id: 'achalandage', label: t.simTabAch  },
@@ -1059,6 +1234,7 @@ function AdminSimulator({ onLogout }: Props) {
     { id: 'od',          label: t.simTabOD   },
     { id: 'equite',      label: t.simTabEq   },
     { id: 'budget',      label: t.simTabBudget },
+    { id: 'rapport',     label: t.simTabReport },
   ]
 
   return (
@@ -1328,6 +1504,23 @@ function AdminSimulator({ onLogout }: Props) {
             onSave={handleSaveCosts}
             saving={savingCosts}
             saveError={saveCostsError}
+          />
+        )}
+
+        {/* ── Onglet Rapport IA ── */}
+        {activeTab === 'rapport' && (
+          <TabReport
+            canGenerate={canGenerateReport}
+            report={report}
+            reportLoading={reportLoading}
+            reportError={reportError}
+            onGenerate={handleGenerateReport}
+            question={question}
+            onQuestionChange={setQuestion}
+            answer={answer}
+            askLoading={askLoading}
+            askError={askError}
+            onAsk={handleAsk}
           />
         )}
 
