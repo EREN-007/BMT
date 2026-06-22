@@ -10,7 +10,7 @@ Démarrage : 20 juin 2026, au réveil.
 
 ---
 
-## État actuel — mise à jour 20 juin 2026 (fin semaines 1-2)
+## État actuel — mise à jour 22 juin 2026
 
 - React 19 + TypeScript + Vite, deux points d'entrée (`index.html` user, `admin.html` admin).
 - **Backend Supabase en production** : Postgres + RLS + auth anonyme. `src/lib/storage.ts`
@@ -19,13 +19,22 @@ Démarrage : 20 juin 2026, au réveil.
   voit sa soumission apparaître côté admin sur n'importe quel autre appareil.
 - Auth Supabase anonyme active (`getOrCreateUserId()` dans `src/lib/auth.ts`), filtrage
   géographique par préfixe FSA en place (client **et** serveur, voir semaine 2 ci-dessous).
+- **Auth admin réelle** (`src/lib/auth.ts::signInAdmin`) : compte Supabase Auth email/mot
+  de passe, appartenance vérifiée via une ligne dans la table `admins` (pas juste "connecté
+  = admin"). Remplace l'ancien mot de passe codé en dur côté client — l'écart de sécurité
+  noté plus bas (semaine 2) est résolu.
+- **Formulaire citoyen persisté** (`Page4Form.tsx` → `saveForm()`) : les réponses sont
+  maintenant écrites dans la table `forms`, rattachées à la même soumission que le tracé —
+  l'écart noté plus bas est résolu.
 - Agrégation des dessins codée et fonctionnelle (`src/lib/aggregation/`), grille spatiale,
   corridors, zones d'équité (`src/lib/equity/`), matrice OD (`src/lib/od/`). L'algorithme
   d'ordonnancement des corridors (`corridors.ts`) a été corrigé (bug de zigzag, voir notes
   plus bas).
 - Carte admin (`AdminMapPage.tsx`) sur Mapbox GL JS, lit les vraies soumissions Supabase
   et se met à jour **en direct** via Supabase Realtime (`postgres_changes` sur
-  `routes`/`stops`, debounce 500ms).
+  `routes`/`stops`, debounce 500ms). Grille d'agrégation affinée (111m → 44m) + seuil de
+  bruit abaissé + couche "Tracés bruts" de vérification ajoutés le 22 juin (voir notes
+  plus bas) pour resserrer la correspondance entre le dessin citoyen et le rendu admin.
 - Pas de stockage de documents de référence, pas de RAG, pas d'IA assistante, pas de
   module budgétaire — c'est l'objet des semaines 3-4, pas commencé.
 
@@ -181,21 +190,49 @@ de nouvelles données de test s'accumulent avant la présentation finale.
 **Livrable de fin de semaine — atteint :** participation filtrée géographiquement, chaque
 dessin tracé à un utilisateur et numéroté, carte admin mise à jour en direct.
 
+**Bug de production découvert et corrigé après coup (22 juin, hors plan initial) :** la
+carte admin restait visuellement décalée par rapport au tracé citoyen même après la
+correction du zigzag. Root cause : `extractCorridors()` reconstruit toujours un corridor
+à partir des centres de cellules de la grille de densité — avec des cellules de 111m, un
+tracé précis (snappé aux rues côté citoyen) était quantifié/arrondi de façon visible, et
+un tracé court (< 3 cellules ≈ 330m) était purement supprimé par `minCells`. Corrigé en
+réduisant la taille de cellule à 44m (`grid.ts`) et en abaissant `minCells` à 2
+(`aggregation/index.ts`). Une couche de vérification a aussi été ajoutée : le toggle
+"Tracés bruts" sur `AdminMapPage.tsx` affiche la géométrie exacte soumise par chaque
+citoyen par-dessus le heatmap agrégé, pour comparer visuellement les deux sans devoir
+remplacer le pipeline d'agrégation (qui reste la base du futur moteur de budget,
+semaine 3). ⚠️ Cette quantification reste structurellement approximative — à garder à
+l'œil si elle ressort encore une fois qu'il y aura plusieurs dizaines de tracés réels
+superposés.
+
 ---
 
 ## Écarts ouverts — à traiter avant ou pendant la semaine 3
 
-Découverts en cours de route, pas encore corrigés :
-
-- [ ] `src/pages/AdminLogin.tsx` utilise encore un mot de passe codé en dur côté client
-  (`bmt2024`) au lieu d'un vrai compte Supabase Auth + appartenance à la table `admins`.
-  C'est exactement le risque pointé dans la checklist Sécurité ("pas de route admin
-  accessible sans vérification de rôle côté serveur") — actuellement non respecté.
-- [ ] `src/pages/Page4Form.tsx` (formulaire citoyen) n'écrit rien dans la table `forms` —
-  aucun appel à `saveSubmission`/Supabase trouvé dans ce fichier. Les réponses du
-  formulaire ne sont donc pas persistées.
-- [ ] Realtime (carte admin) à reconfirmer en conditions réelles après la correction du
-  bug de corridors (voir semaine 2 ci-dessus).
+- [x] ~~`src/pages/AdminLogin.tsx` utilise encore un mot de passe codé en dur côté
+  client~~ — corrigé : `signInAdmin()` utilise un vrai compte Supabase Auth, vérifié
+  contre la table `admins` (voir `src/lib/auth.ts`).
+- [x] ~~`src/pages/Page4Form.tsx` n'écrit rien dans la table `forms`~~ — corrigé :
+  `handleSubmit` appelle `saveForm(submissionId, ...)`, rattaché à la soumission créée
+  par `MapPage`.
+- [~] Realtime (carte admin) — au moins une soumission citoyenne réelle de bout en
+  bout (tracé + formulaire) est arrivée jusqu'à Supabase et visible côté admin (table
+  `forms`, 1 ligne réelle au 22 juin). L'abonnement `postgres_changes` lui-même
+  (mise à jour sans rafraîchir la page) n'a pas été revérifié explicitement depuis le
+  fix de corridors — à confirmer avec une deuxième soumission pendant que l'admin a
+  la carte ouverte.
+- [ ] **`AdminFinalMap.tsx` ("carte finale") n'est pas branchée aux vraies données.**
+  Elle affiche `DEFAULT_ROUTES`, un jeu de 4 lignes fictives codées en dur (numéros
+  10/20/30/40, achalandage inventé), filtré seulement par un flag `bmt_final_state`
+  écrit dans `localStorage` par `AdminSimulator.tsx`. Pour une présentation réelle au
+  ministère, cette carte doit dériver des corridors agrégés réels
+  (`src/lib/aggregation`), pas d'un mock — actuellement c'est le seul endroit de
+  l'admin qui ment encore sur l'origine des données.
+- [ ] Pas de garde-fou serveur sur le nombre de points par tracé ni les bornes
+  géographiques (`routes.points`) — repris de la checklist Sécurité, toujours pas fait.
+  Pertinent maintenant que de vraies soumissions arrivent.
+- [ ] Pas de rate limiting sur `saveSubmission`/`saveForm` — un citoyen (ou un script)
+  peut soumettre un nombre illimité de fois.
 
 ---
 
