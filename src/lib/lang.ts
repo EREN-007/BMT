@@ -251,6 +251,8 @@ export const ADMIN_T = {
     // Simulator
     simTitle:      'Simulateur',
     simSub:        'Impact en temps réel',
+    simDataReal:   '● Données citoyennes réelles',
+    simDataDemo:   '○ Jeu de démonstration',
     simCoverage:   'couverture',
     simExcellent:  'Excellent',
     simAccept:     'Acceptable',
@@ -334,6 +336,8 @@ export const ADMIN_T = {
     // Final map
     finalTitle:    'Carte Finale',
     finalSub:      'Conforme N.-B. — Prête à adopter',
+    finalDataReal: '● Basée sur les soumissions citoyennes réelles',
+    finalDataDemo: '○ Exemple de démonstration — aucune donnée citoyenne suffisante',
     finalLines:    'lignes',
     finalStops:    'arrêts',
     finalPass:     'pass./j',
@@ -440,6 +444,8 @@ export const ADMIN_T = {
     // Simulator
     simTitle:      'Simulator',
     simSub:        'Real-time impact',
+    simDataReal:   '● Real citizen data',
+    simDataDemo:   '○ Demo dataset',
     simCoverage:   'coverage',
     simExcellent:  'Excellent',
     simAccept:     'Acceptable',
@@ -523,6 +529,8 @@ export const ADMIN_T = {
     // Final map
     finalTitle:    'Final Map',
     finalSub:      'N.B. Compliant — Ready to adopt',
+    finalDataReal: '● Based on real citizen submissions',
+    finalDataDemo: '○ Demo example — not enough citizen data yet',
     finalLines:    'lines',
     finalStops:    'stops',
     finalPass:     'pass./day',

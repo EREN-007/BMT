@@ -7,6 +7,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getLang, ADMIN_T } from '@/lib/lang'
 import { useEffect } from 'react'
+import { FinalRoute, FinalStop, FinalState, FINAL_STATE_KEY } from '@/lib/finalState'
 
 const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
 const MB_STYLE  = `https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=${MB_TOKEN}`
@@ -19,30 +20,10 @@ function InvalidateSize() {
   return null
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+type StopType = FinalStop['type']
 
-type RouteType = 'Principal' | 'Secondaire' | 'Express'
-type StopType  = 'terminus' | 'transfer' | 'station' | 'regular'
-
-interface FinalRoute {
-  id: string; number: string
-  labelFR: string; labelEN: string
-  color: string; type: RouteType
-  frequency: string; ridership: number
-  points: [number,number][]
-  midpoint: [number,number]
-  stops: string[]
-}
-
-interface FinalStop {
-  id: string; label: string; labelEN: string
-  type: StopType
-  pos: [number,number]
-  accessible: boolean
-  routes: string[]
-}
-
-// ─── Données finales (fallback) ───────────────────────────────────────────────
+// ─── Données finales (fallback démo, utilisées tant qu'aucune génération réelle
+// depuis le simulateur n'existe dans localStorage) ─────────────────────────────
 
 const DEFAULT_ROUTES: FinalRoute[] = [
   {
@@ -231,16 +212,27 @@ function AdminFinalMap({ onLogout }: Props) {
   const [submitted, setSubmitted]       = useState(false)
   const [showBoundaries, setShowBound]  = useState(true)
 
-  // Chargement depuis localStorage (sauvegardé par AdminSimulator)
-  const [routes] = useState<FinalRoute[]>(() => {
+  // Chargement depuis localStorage (sauvegardé par AdminSimulator au clic sur
+  // "Générer la carte finale") — repli sur les données de démonstration si absent,
+  // invalide, ou vide.
+  const [finalData] = useState<{ routes: FinalRoute[]; stops: FinalStop[]; isRealData: boolean }>(() => {
     try {
-      const raw = localStorage.getItem('bmt_final_state')
-      if (!raw) return DEFAULT_ROUTES
-      const { activeRoutes } = JSON.parse(raw) as { activeRoutes: string[] }
-      const filtered = DEFAULT_ROUTES.filter(r => activeRoutes.includes(r.id))
-      return filtered.length > 0 ? filtered : DEFAULT_ROUTES
-    } catch { return DEFAULT_ROUTES }
+      const raw = localStorage.getItem(FINAL_STATE_KEY)
+      if (!raw) return { routes: DEFAULT_ROUTES, stops: FINAL_STOPS, isRealData: false }
+      const parsed = JSON.parse(raw) as Partial<FinalState>
+      if (!Array.isArray(parsed.routes) || parsed.routes.length === 0) {
+        return { routes: DEFAULT_ROUTES, stops: FINAL_STOPS, isRealData: false }
+      }
+      return {
+        routes: parsed.routes,
+        stops: Array.isArray(parsed.stops) && parsed.stops.length > 0 ? parsed.stops : FINAL_STOPS,
+        isRealData: !!parsed.isRealData,
+      }
+    } catch {
+      return { routes: DEFAULT_ROUTES, stops: FINAL_STOPS, isRealData: false }
+    }
   })
+  const { routes, stops, isRealData } = finalData
 
   const totalRidership = routes.reduce((a, r) => a + r.ridership, 0)
 
@@ -353,7 +345,7 @@ function AdminFinalMap({ onLogout }: Props) {
           ))}
 
           {/* Arrêts officiels */}
-          {FINAL_STOPS.map(s => {
+          {stops.map(s => {
             const col = stopPrimaryColor(s)
             return (
               <Marker key={s.id} position={s.pos} icon={stopIcon(s.type, col)}>
@@ -403,12 +395,19 @@ function AdminFinalMap({ onLogout }: Props) {
           </div>
         </div>
 
+        <div style={{
+          margin: '0 16px 10px', fontSize: '0.68rem', fontWeight: 700,
+          color: isRealData ? '#2ecc71' : '#f39c12',
+        }}>
+          {isRealData ? t.finalDataReal : t.finalDataDemo}
+        </div>
+
         <div className="sim-tab-content">
 
           {/* KPIs */}
           <div className="fm-kpi-row">
             <div className="fm-kpi"><span>{routes.length}</span>{t.finalLines}</div>
-            <div className="fm-kpi"><span>{FINAL_STOPS.length}</span>{t.finalStops}</div>
+            <div className="fm-kpi"><span>{stops.length}</span>{t.finalStops}</div>
             <div className="fm-kpi"><span>{(totalRidership/1000).toFixed(1)}k</span>{t.finalPass}</div>
           </div>
 

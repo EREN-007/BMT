@@ -13,8 +13,10 @@ import {
   computeEquity, gapLevelColor, gapLevelLabel, EquityResult, EQ_ZONES,
 } from '@/lib/equity'
 import { computeRidership, RidershipResult } from '@/lib/ridership'
-import { getRoutes } from '@/lib/storage'
+import { aggregate, AggregatedCorridor, AggregatedStop } from '@/lib/aggregation'
+import { getRoutes, getStops } from '@/lib/storage'
 import { getLang, ADMIN_T } from '@/lib/lang'
+import { FinalRoute, FinalStop, FINAL_STATE_KEY } from '@/lib/finalState'
 
 const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
 const MB_STYLE  = `https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=${MB_TOKEN}`
@@ -89,19 +91,56 @@ const INIT_ROUTES: SimRoute[] = [
     points: [[46.0878,-64.7782],[46.0820,-64.7800],[46.0760,-64.7830],[46.0700,-64.7900],[46.0630,-64.7970]], active: false },
 ]
 
-// ─── Associations route → arrêts pour modélisation d'achalandage ─────────────
-// Chaque route dessert une liste d'arrêts dont on agrège la demande citoyenne
-
-const ROUTE_STOPS: Record<string, string[]> = {
-  r1: ['s1', 's2', 's5', 'st1'],
-  r2: ['s3', 's5', 's6', 'st1'],
-  r3: ['s4', 's8', 'st2'],
-  r4: ['s1', 's7', 's10', 'st3'],
-}
-
 const COVERAGE_RADIUS = 400
 const STATION_RADIUS  = 800
 const MONCTON_CENTER: [number, number] = [46.075, -64.760]
+const M_PER_LAT = 111_320
+const M_PER_LNG =  77_340
+
+// ─── Seed à partir des vraies données citoyennes agrégées ────────────────────
+// Quand l'agrégation produit assez de corridors/arrêts, le simulateur démarre
+// sur ces données réelles plutôt que sur le jeu de démonstration — sinon
+// "Générer la carte finale" produit un résultat fictif sans que l'admin le sache.
+
+const SEED_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
+
+function seedRoutesFromCorridors(corridors: AggregatedCorridor[]): SimRoute[] {
+  return corridors.map((c, i) => ({
+    id:     c.id,
+    label:  `${c.label} (${c.count} citoyen${c.count > 1 ? 's' : ''})`,
+    points: c.points,
+    active: true,
+    color:  SEED_COLORS[i % SEED_COLORS.length],
+  }))
+}
+
+function seedStopsFromAggregated(stops: AggregatedStop[]): SimStop[] {
+  return stops.map(s => ({
+    id:     s.id,
+    label:  `${s.label} (${s.count} citoyen${s.count > 1 ? 's' : ''})`,
+    type:   s.type,
+    pos:    s.pos,
+    active: true,
+    demand: s.count * 5,
+  }))
+}
+
+// ─── Association route → arrêts pour modélisation d'achalandage ──────────────
+// Dynamique (plutôt qu'une table statique) car les ids des routes/arrêts seedés
+// depuis les vraies données n'ont aucun rapport avec ceux du jeu de démo.
+
+function nearbyStopIds(route: SimRoute, stops: SimStop[], radiusM = 400): string[] {
+  const ids: string[] = []
+  for (const stop of stops) {
+    const near = route.points.some(([lat, lng]) => {
+      const dy = (lat - stop.pos[0]) * M_PER_LAT
+      const dx = (lng - stop.pos[1]) * M_PER_LNG
+      return Math.sqrt(dx * dx + dy * dy) <= radiusM
+    })
+    if (near) ids.push(stop.id)
+  }
+  return ids
+}
 
 // ─── Calcul des métriques de couverture ───────────────────────────────────────
 
@@ -127,7 +166,7 @@ const LOAD_FACTOR     = 0.72  // % d'occupation moyen
 
 function computeRouteRidership(route: SimRoute, stops: SimStop[], peak: boolean): number {
   if (!route.active) return 0
-  const ids        = ROUTE_STOPS[route.id] || []
+  const ids        = nearbyStopIds(route, stops, COVERAGE_RADIUS)
   const stopObjs   = ids.map(id => stops.find(s => s.id === id)).filter(Boolean) as SimStop[]
   const demand     = stopObjs.filter(s => s.active).reduce((a, s) => a + s.demand, 0)
   const base       = demand * DAILY_TRIPS * LOAD_FACTOR
@@ -696,8 +735,11 @@ function AdminSimulator({ onLogout }: Props) {
   const [odMatrix,       setOdMatrix]       = useState<ODMatrix | null>(null)
   const [equityResult,    setEquityResult]   = useState<EquityResult | null>(null)
   const [ridershipResult, setRidershipResult] = useState<RidershipResult | null>(null)
+  const [usingRealData,   setUsingRealData]   = useState(false)
   const counterRef      = useRef(100)
   const citizenRoutesRef = useRef<Array<{ points: [number, number][] }>>([])
+  const seedStopsRef     = useRef<SimStop[]>(INIT_STOPS)
+  const seedRoutesRef    = useRef<SimRoute[]>(INIT_ROUTES)
 
   // ── Moteur de couverture — recalcul à chaque changement d'arrêts ──────────
   useEffect(() => {
@@ -711,9 +753,26 @@ function AdminSimulator({ onLogout }: Props) {
     setEquityResult(result)
   }, [stops])
 
-  // ── Chargement des tracés citoyens (une seule fois au montage) ────────────
+  // ── Chargement + agrégation des données citoyennes (une seule fois au montage) ──
+  // Si assez de tracés/arrêts réels existent, le simulateur démarre dessus plutôt
+  // que sur le jeu de démonstration — sinon "Générer la carte finale" produirait
+  // un résultat fictif que rien ne distingue de vraies données.
   useEffect(() => {
-    getRoutes().then(r => { citizenRoutesRef.current = r })
+    Promise.all([getRoutes(), getStops()]).then(([citizenRoutes, citizenStops]) => {
+      citizenRoutesRef.current = citizenRoutes
+      const agg        = aggregate(citizenRoutes, citizenStops)
+      const realRoutes  = seedRoutesFromCorridors(agg.corridors)
+      const realStops   = seedStopsFromAggregated(agg.stops)
+      if (realRoutes.length === 0 && realStops.length === 0) return
+
+      const seededRoutes = realRoutes.length > 0 ? realRoutes : INIT_ROUTES
+      const seededStops  = realStops.length  > 0 ? realStops  : INIT_STOPS
+      seedRoutesRef.current = seededRoutes
+      seedStopsRef.current  = seededStops
+      setRoutes(seededRoutes)
+      setStops(seededStops)
+      setUsingRealData(true)
+    })
   }, [])
 
   // ── Matrice O-D — recalcul quand les lignes actives changent ─────────────
@@ -765,16 +824,64 @@ function AdminSimulator({ onLogout }: Props) {
   }, [])
 
   const handleReset = () => {
-    setStops(INIT_STOPS)
-    setRoutes(INIT_ROUTES)
+    setStops(seedStopsRef.current)
+    setRoutes(seedRoutesRef.current)
     setLastImpact(null)
   }
 
   const handleGenerateFinal = useCallback(() => {
-    const activeRoutes = routes.filter(r => r.active).map(r => r.id)
-    localStorage.setItem('bmt_final_state', JSON.stringify({ activeRoutes }))
+    const activeRoutes = routes.filter(r => r.active)
+    const dailyRiders   = (id: string) => ridershipResult?.routes.find(x => x.routeId === id)?.dailyRiders ?? 0
+    const topRidership  = activeRoutes.length > 0 ? Math.max(...activeRoutes.map(r => dailyRiders(r.id))) : 0
+
+    const finalRoutes: FinalRoute[] = activeRoutes.map((r, i) => {
+      const number   = String((i + 1) * 10)
+      const rid      = dailyRiders(r.id)
+      const servedIds = nearbyStopIds(r, stops, COVERAGE_RADIUS)
+      const servedLbl = servedIds
+        .map(id => stops.find(s => s.id === id)?.label)
+        .filter((l): l is string => !!l)
+      return {
+        id: r.id, number,
+        labelFR: `Ligne ${number} — ${r.label}`,
+        labelEN: `Route ${number} — ${r.label}`,
+        color: r.color,
+        type: topRidership > 0 && rid === topRidership ? 'Principal' : 'Secondaire',
+        frequency: rid >= 500 ? '15 min' : rid >= 250 ? '20 min' : '30 min',
+        ridership: rid,
+        points: r.points,
+        midpoint: r.points[Math.floor(r.points.length / 2)],
+        stops: servedLbl,
+      }
+    })
+
+    const stopRouteNumbers = new Map<string, string[]>()
+    activeRoutes.forEach((r, i) => {
+      const number = String((i + 1) * 10)
+      nearbyStopIds(r, stops, COVERAGE_RADIUS).forEach(stopId => {
+        const list = stopRouteNumbers.get(stopId) ?? []
+        list.push(number)
+        stopRouteNumbers.set(stopId, list)
+      })
+    })
+
+    const finalStops: FinalStop[] = stops
+      .filter(s => stopRouteNumbers.has(s.id))
+      .map(s => ({
+        id: s.id, label: s.label, labelEN: s.label,
+        type: s.type === 'station' ? 'station' : 'regular',
+        pos: s.pos, accessible: true,
+        routes: stopRouteNumbers.get(s.id) ?? [],
+      }))
+
+    localStorage.setItem(FINAL_STATE_KEY, JSON.stringify({
+      routes: finalRoutes,
+      stops: finalStops,
+      isRealData: usingRealData,
+      generatedAt: Date.now(),
+    }))
     navigate('/carte-finale')
-  }, [routes, navigate])
+  }, [routes, stops, ridershipResult, usingRealData, navigate])
 
   const handleSaveScenario = useCallback((slot: 'A' | 'B') => {
     const m = computeMetrics(stops)
@@ -897,6 +1004,13 @@ function AdminSimulator({ onLogout }: Props) {
             <h2 className="sim-title">{t.simTitle}</h2>
             <p className="sim-subtitle">{t.simSub}</p>
           </div>
+        </div>
+
+        <div style={{
+          margin: '0 16px 10px', fontSize: '0.68rem', fontWeight: 700,
+          color: usingRealData ? '#2ecc71' : 'rgba(255,255,255,0.35)',
+        }}>
+          {usingRealData ? t.simDataReal : t.simDataDemo}
         </div>
 
         {/* Score couverture (toujours visible) */}

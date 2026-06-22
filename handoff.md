@@ -221,13 +221,19 @@ superposés.
   (mise à jour sans rafraîchir la page) n'a pas été revérifié explicitement depuis le
   fix de corridors — à confirmer avec une deuxième soumission pendant que l'admin a
   la carte ouverte.
-- [ ] **`AdminFinalMap.tsx` ("carte finale") n'est pas branchée aux vraies données.**
-  Elle affiche `DEFAULT_ROUTES`, un jeu de 4 lignes fictives codées en dur (numéros
-  10/20/30/40, achalandage inventé), filtré seulement par un flag `bmt_final_state`
-  écrit dans `localStorage` par `AdminSimulator.tsx`. Pour une présentation réelle au
-  ministère, cette carte doit dériver des corridors agrégés réels
-  (`src/lib/aggregation`), pas d'un mock — actuellement c'est le seul endroit de
-  l'admin qui ment encore sur l'origine des données.
+- [x] ~~`AdminFinalMap.tsx` ("carte finale") n'est pas branchée aux vraies données~~ —
+  corrigé (22 juin). `AdminSimulator.tsx` se seede maintenant avec les corridors/arrêts
+  agrégés réels (`aggregate()` sur `getRoutes()`/`getStops()`) au montage, avec repli sur
+  le jeu de démo `INIT_STOPS`/`INIT_ROUTES` seulement si l'agrégation ne produit rien
+  d'exploitable. L'association route → arrêts pour l'achalandage local n'est plus une
+  table statique (`ROUTE_STOPS`, ids incompatibles avec les ids réels) mais une fonction
+  de proximité géographique (`nearbyStopIds()`, rayon 400m). `handleGenerateFinal()`
+  écrit maintenant dans `localStorage['bmt_final_state']` des objets `FinalRoute[]`/
+  `FinalStop[]` complets (pas juste des ids) plus un flag `isRealData`, format partagé via
+  `src/lib/finalState.ts`. `AdminFinalMap.tsx` lit ce nouveau format (repli sur
+  `DEFAULT_ROUTES`/`FINAL_STOPS` si absent/invalide/vide) et affiche un badge visible
+  ("● Basée sur les soumissions citoyennes réelles" / "○ Exemple de démonstration")
+  pour que l'admin sache toujours si ce qu'il regarde est réel ou fictif.
 - [ ] Pas de garde-fou serveur sur le nombre de points par tracé ni les bornes
   géographiques (`routes.points`) — repris de la checklist Sécurité, toujours pas fait.
   Pertinent maintenant que de vraies soumissions arrivent.
