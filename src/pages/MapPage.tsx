@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Map, { Source, Layer, Marker } from 'react-map-gl/mapbox'
+import Map, { Source, Layer, Marker, GeolocateControl, NavigationControl } from 'react-map-gl/mapbox'
 import type { MapRef, MapMouseEvent } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { saveSubmission } from '@/lib/storage'
@@ -392,6 +392,17 @@ function MapPage() {
     // Ne pas déclencher si on clique sur un bouton du toolbar
     if ((e.originalEvent.target as HTMLElement).closest('.mp-float-toolbar')) return
 
+    if (activeTool === 'eraser') {
+      // Mode gomme : on supprime uniquement la ligne touchée (tap-to-delete)
+      const feature = e.features?.[0]
+      const layerId = feature?.layer?.id
+      if (layerId?.startsWith('lyr-')) {
+        const routeId = layerId.slice('lyr-'.length)
+        setRoutes(prev => prev.filter(r => r.id !== routeId))
+      }
+      return
+    }
+
     const { lng, lat } = e.lngLat
     const pt: [number, number] = [lat, lng]
 
@@ -419,29 +430,35 @@ function MapPage() {
     setIsDrawing(false)
   }, [])
 
-  // ── Effacer le dernier élément ─────────────────────────────────────────────
-  const eraseLastItem = useCallback(() => {
-    if (stops.length > 0) {
-      setStops(prev => prev.slice(0, -1))
-      return
-    }
-    if (routes.length > 0) {
-      setRoutes(prev => {
-        const finished = prev.filter(r => r.finished)
-        if (finished.length > 0)
-          return prev.filter(r => r.id !== finished[finished.length - 1].id)
-        return prev.slice(0, -1)
-      })
+  // ── Annuler le dernier point (en cours de tracé) ───────────────────────────
+  const undoLastPoint = useCallback(() => {
+    const active = routes.find(r => r.id === currentIdRef.current && !r.finished)
+    if (!active) return
+    if (active.points.length <= 1) {
+      // Plus qu'un seul point — annule la ligne entière
+      setRoutes(prev => prev.filter(r => r.id !== active.id))
       setIsDrawing(false)
+      currentIdRef.current = ''
+    } else {
+      setRoutes(prev =>
+        prev.map(r => r.id === active.id
+          ? { ...r, points: r.points.slice(0, -1), snappedPoints: undefined }
+          : r
+        )
+      )
     }
-  }, [routes, stops])
+  }, [routes])
+
+  // ── Supprimer un arrêt (tap-to-delete en mode gomme) ───────────────────────
+  const deleteStop = useCallback((id: string) => {
+    setStops(prev => prev.filter(s => s.id !== id))
+  }, [])
 
   // ── Changement d'outil ─────────────────────────────────────────────────────
   const handleToolChange = useCallback((tool: Tool) => {
     if (activeTool === 'pencil' && isDrawing) finishRoute()
     setActiveTool(tool)
-    if (tool === 'eraser') eraseLastItem()
-  }, [activeTool, isDrawing, finishRoute, eraseLastItem])
+  }, [activeTool, isDrawing, finishRoute])
 
   // ── Confirmer arrêt (position affinée depuis la carte 3D) ─────────────────
   const handleStopConfirm = useCallback((label: string, refinedPos: [number, number]) => {
@@ -514,7 +531,12 @@ function MapPage() {
   // ── Curseur selon outil ────────────────────────────────────────────────────
   const cursor =
     activeTool === 'pencil'  ? 'crosshair' :
-    activeTool === 'eraser'  ? 'not-allowed' : 'copy'
+    activeTool === 'eraser'  ? 'pointer' : 'copy'
+
+  // ── Lignes cliquables — uniquement en mode gomme (tap-to-delete) ──────────
+  const interactiveLayerIds = activeTool === 'eraser'
+    ? routes.filter(r => r.points.length >= 2).map(r => `lyr-${r.id}`)
+    : undefined
 
   return (
     <div className="mp-root">
@@ -528,9 +550,19 @@ function MapPage() {
         style={{ width: '100%', height: '100%' }}
         onClick={handleMapClick}
         cursor={cursor}
+        interactiveLayerIds={interactiveLayerIds}
         attributionControl={false}
         logoPosition="bottom-right"
       >
+        {/* Contrôles natifs — boussole / zoom / géolocalisation */}
+        <NavigationControl position="top-right" visualizePitch showCompass showZoom />
+        <GeolocateControl
+          position="top-right"
+          trackUserLocation
+          showUserHeading
+          positionOptions={{ enableHighAccuracy: true }}
+        />
+
         {/* Routes tracées */}
         {routes.map(route =>
           route.points.length >= 2 && (
@@ -586,8 +618,13 @@ function MapPage() {
             anchor="bottom"
           >
             <div
-              className={`mp-mb-pin mp-mb-pin-${stop.type}`}
+              className={`mp-mb-pin mp-mb-pin-${stop.type} ${activeTool === 'eraser' ? 'mp-mb-pin-erasable' : ''}`}
               title={stop.label}
+              onClick={e => {
+                if (activeTool !== 'eraser') return
+                e.stopPropagation()
+                deleteStop(stop.id)
+              }}
             >
               {stop.type === 'busstop'
                 ? (
@@ -632,6 +669,9 @@ function MapPage() {
       {activeTool === 'pencil' && isDrawing && (
         <div className="mp-hint mp-hint-drawing">{t.hintDraw}</div>
       )}
+      {activeTool === 'eraser' && (
+        <div className="mp-hint mp-hint-erase">{t.hintErase}</div>
+      )}
 
       {/* ── Toolbar flottant ── */}
       <div className="mp-float-toolbar">
@@ -663,13 +703,6 @@ function MapPage() {
               ))}
             </div>
 
-            {isDrawing && (
-              <button className="mp-ft-btn mp-ft-finish" onClick={finishRoute} title={t.titleFinish}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </button>
-            )}
           </div>
 
           {/* Ligne 2 : gomme, arrêt, station, résultats */}
@@ -746,19 +779,40 @@ function MapPage() {
             <span /><span /><span />
           </button>
 
-          {/* Outil actif — badge contextuel */}
-          <div className="mp-ft-active-badge">
-            {activeTool === 'pencil'  && <span style={{ color: activeColor }}>{t.toolDraw}</span>}
-            {activeTool === 'eraser'  && <span>{t.toolEraser}</span>}
-            {activeTool === 'busstop' && <span>{t.toolBusstop}</span>}
-            {activeTool === 'station' && <span>{t.toolStation}</span>}
-          </div>
+          {isDrawing ? (
+            /* En cours de tracé — annuler le dernier point / terminer la ligne */
+            <div className="mp-ft-draw-controls">
+              <button className="mp-ft-undo" onClick={undoLastPoint} title={t.titleUndo}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <path d="M9 14L4 9l5-5"/>
+                  <path d="M4 9h11a5 5 0 0 1 0 10h-1"/>
+                </svg>
+                <span>{t.toolUndo}</span>
+              </button>
+              <button className="mp-ft-finish-inline" onClick={finishRoute} title={t.titleFinish}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>{t.titleFinish}</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Outil actif — badge contextuel */}
+              <div className="mp-ft-active-badge">
+                {activeTool === 'pencil'  && <span style={{ color: activeColor }}>{t.toolDraw}</span>}
+                {activeTool === 'eraser'  && <span>{t.toolEraser}</span>}
+                {activeTool === 'busstop' && <span>{t.toolBusstop}</span>}
+                {activeTool === 'station' && <span>{t.toolStation}</span>}
+              </div>
 
-          <div className="mp-ft-stats">
-            {finishedCount > 0 && <span>{t.statLine(finishedCount)}</span>}
-            {stopCount     > 0 && <span>{t.statStop(stopCount)}</span>}
-            {stationCount  > 0 && <span>{t.statStation(stationCount)}</span>}
-          </div>
+              <div className="mp-ft-stats">
+                {finishedCount > 0 && <span>{t.statLine(finishedCount)}</span>}
+                {stopCount     > 0 && <span>{t.statStop(stopCount)}</span>}
+                {stationCount  > 0 && <span>{t.statStation(stationCount)}</span>}
+              </div>
+            </>
+          )}
 
           <button className="mp-ft-next" onClick={handleNext} disabled={isSaving}>
             {isSaving ? '…' : t.next}

@@ -18,7 +18,7 @@
 /* ── Hint bar ── */
 .mp-hint {
   position: absolute;
-  top: 20px;
+  top: env(safe-area-inset-top, 20px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 200;
@@ -39,10 +39,15 @@
   color: #b8f5d0;
 }
 
+.mp-hint-erase {
+  border-color: rgba(255, 100, 80, 0.4);
+  color: #ffc8bd;
+}
+
 /* ── Badge "brouillon restauré" ── */
 .mp-draft-badge {
   position: absolute;
-  top: 20px;
+  top: env(safe-area-inset-top, 20px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 201;
@@ -176,9 +181,13 @@
 /* Badge outil actif */
 .mp-ft-active-badge {
   flex: 1;
+  min-width: 0;
   font-size: 0.8rem;
   color: rgba(255,255,255,0.7);
   padding-left: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Boutons outils */
@@ -252,8 +261,49 @@
   gap: 10px;
   font-size: 0.75rem;
   color: rgba(255,255,255,0.5);
+  min-width: 0;
+  overflow: hidden;
 }
 .mp-ft-stats strong { color: white; }
+
+/* Contrôles de tracé (annuler / terminer) — remplace badge+stats pendant un tracé actif */
+.mp-ft-draw-controls {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mp-ft-undo,
+.mp-ft-finish-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 12px;
+  padding: 9px 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.1s;
+}
+.mp-ft-undo svg,
+.mp-ft-finish-inline svg { width: 16px; height: 16px; flex-shrink: 0; }
+.mp-ft-undo {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.8);
+}
+.mp-ft-undo:hover { background: rgba(255,255,255,0.14); }
+.mp-ft-finish-inline {
+  background: rgba(46,204,113,0.2);
+  color: #2ecc71;
+  animation: finish-pulse 1.2s ease-in-out infinite;
+}
+.mp-ft-finish-inline:hover { background: rgba(46,204,113,0.3); transform: scale(1.02); }
 
 /* Bouton Suivant */
 .mp-ft-next {
@@ -286,6 +336,50 @@
 .mp-mb-pin:hover { transform: scale(1.15); }
 .mp-mb-pin-busstop svg { width: 32px; height: 40px; }
 .mp-mb-pin-station svg { width: 36px; height: 44px; }
+
+/* Mode gomme — affordance "touchez pour supprimer" sur les arrêts/stations */
+.mp-mb-pin-erasable {
+  cursor: pointer;
+  animation: mp-erasable-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mp-erasable-pulse {
+  0%, 100% { filter: drop-shadow(0 3px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 0 rgba(255,80,60,0)); }
+  50%      { filter: drop-shadow(0 3px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 6px rgba(255,80,60,0.8)); }
+}
+
+/* ── Contrôles natifs Mapbox (zoom / boussole / géolocalisation) ──
+   Thème sombre assorti à l'interface + respect des zones sûres mobiles. */
+.mp-root .mapboxgl-ctrl-top-right {
+  top: env(safe-area-inset-top, 14px);
+  right: 10px;
+}
+.mp-root .mapboxgl-ctrl-group {
+  background: rgba(10, 22, 40, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  margin: 0 0 10px;
+}
+.mp-root .mapboxgl-ctrl-group button {
+  width: 38px;
+  height: 38px;
+  background-color: transparent;
+}
+.mp-root .mapboxgl-ctrl-group button + button {
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+.mp-root .mapboxgl-ctrl-group button:hover {
+  background-color: rgba(255,255,255,0.1);
+}
+.mp-root .mapboxgl-ctrl-icon {
+  filter: invert(1) brightness(1.7);
+}
+.mp-root .mapboxgl-ctrl-geolocate .mapboxgl-ctrl-icon {
+  filter: invert(1) brightness(1.7);
+}
 
 /* ── Modal immersif 3D (arrêt / station) ── */
 
@@ -621,6 +715,19 @@
   .mp-float-toolbar { left: 8px; right: 8px; }
   .mp-modal { max-width: 100%; border-radius: 14px; }
   .mp-modal-map-wrap { height: 150px; }
+  .mp-root .mapboxgl-ctrl-group button { width: 34px; height: 34px; }
+}
+
+/* Très petits écrans — éviter tout débordement de la barre d'actions */
+@media (max-width: 360px) {
+  .mp-ft-row { gap: 5px; padding: 9px 10px; }
+  .mp-ft-burger { width: 38px; height: 38px; }
+  .mp-ft-active-badge { font-size: 0.72rem; }
+  .mp-ft-stats { gap: 6px; font-size: 0.68rem; }
+  .mp-ft-next { padding: 9px 12px; font-size: 0.8rem; }
+  .mp-ft-undo span,
+  .mp-ft-finish-inline span { display: none; }
+  .mp-ft-undo, .mp-ft-finish-inline { flex: 0 0 38px; padding: 9px; }
 }
 
 :root {

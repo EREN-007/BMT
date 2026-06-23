@@ -37,6 +37,19 @@ Démarrage : 20 juin 2026, au réveil.
   plus bas) pour resserrer la correspondance entre le dessin citoyen et le rendu admin.
 - Pas de stockage de documents de référence, pas de RAG, pas d'IA assistante, pas de
   module budgétaire — c'est l'objet des semaines 3-4, pas commencé.
+- **Carte citoyenne (`MapPage.tsx`) — refonte UX mobile-first, 23 juin** : la gomme passait
+  d'un effacement aveugle du dernier élément (LIFO) à un effacement ciblé "touchez pour
+  supprimer" (lignes via `interactiveLayerIds` + détection de feature au clic, arrêts via
+  `onClick` sur le marqueur, affordance visuelle pulsée). Ajout d'un "Annuler le dernier
+  point" pendant un tracé actif (remplace badge/stats dans la barre d'actions tant que
+  `isDrawing`), pour corriger un point erroné sans devoir jeter toute la ligne. Ajout des
+  contrôles Mapbox natifs `NavigationControl` (zoom + boussole, `visualizePitch` pour
+  remettre la vue à plat en un tap) et `GeolocateControl` ("me centrer"), réhabillés en
+  thème sombre et positionnés en haut à droite pour ne pas empiéter sur la barre d'outils
+  flottante. CSS : zones sûres mobiles (`env(safe-area-inset-top)`) appliquées aux
+  éléments ancrés en haut, resserrement pour très petits écrans (≤360px). Aucun test
+  visuel interactif possible dans cet environnement (pas d'outil navigateur) — vérifié via
+  `tsc --noEmit`, `npm run build`, et `curl` sur le serveur dev.
 
 ---
 
