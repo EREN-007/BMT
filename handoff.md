@@ -409,3 +409,161 @@ d'une carte synthétisée, avec analyse experte et budget chiffré.
 - **Charge de la semaine 4** : c'est la semaine la plus dense (agent + rapport) ;
   si du retard s'accumule en semaines 1–2, prévoir de simplifier le rapport plutôt que
   de sacrifier la fiabilité du budget ou des données.
+
+---
+
+## Charge à l'échelle du Grand Moncton (~200k habitants) — analyse, 23 juin 2026
+
+**Pas encore implémenté — analyse + recommandations seulement.**
+
+200k habitants ne veut pas dire 200k requêtes simultanées : pour une consultation
+citoyenne de ce type, le taux de participation réaliste (même avec une bonne campagne)
+tourne historiquement autour de 1 à 5 % de la population sur plusieurs semaines, soit
+quelques centaines à ~10 000 soumissions — pas un pic de trafic massif et simultané.
+L'architecture actuelle (Netlify CDN statique + Supabase + Mapbox + xAI à la demande
+admin) tient largement ce volume sans changement. Les points de vigilance réels avant un
+lancement public large :
+
+- **Supabase (tier gratuit probable actuellement)** : limites de connexions DB et de
+  MAU sur l'auth anonyme. Chaque soumission citoyenne crée un utilisateur anonyme
+  (`getOrCreateUserId()`) — à surveiller si la participation dépasse quelques milliers.
+  → Recommandé : passer en tier Pro avant le lancement public (sauvegardes, plus de
+  connexions, pas de pause après inactivité).
+- **Agrégation côté client** (`src/lib/aggregation/`) : `getRoutes()`/`getStops()`
+  rapatrient *toutes* les lignes brutes vers le navigateur admin à chaque mise à jour
+  Realtime, puis agrègent en JS. Tient bien jusqu'à quelques milliers de soumissions ;
+  au-delà (dizaines de milliers), c'est le vrai goulot d'étranglement — il faudrait
+  déplacer l'agrégation vers une vue matérialisée Postgres recalculée côté serveur plutôt
+  que de tout retélécharger côté navigateur à chaque fois.
+- **Mapbox Map Matching API** : appelée à chaque tracé citoyen (debounce 500ms), quota
+  gratuit limité (~100k requêtes/mois). À surveiller via le dashboard Mapbox si la
+  participation grimpe ; budgéter du pay-as-you-go si besoin.
+- **xAI Grok (génération de rapport)** : déclenché uniquement par l'admin, pas par les
+  citoyens — non concerné par la charge publique, mais mérite une limite de fréquence
+  par admin pour éviter un coût qui s'emballe sur des clics répétés.
+- **Hébergement statique (Netlify)** : aucune inquiétude, le CDN absorbe un trafic bien
+  plus élevé que ce dont ce projet a besoin.
+
+**Conclusion :** l'app tiendra la charge réaliste d'une consultation à l'échelle du
+Grand Moncton telle qu'elle est construite aujourd'hui. Les trois actions à faire avant
+un lancement public élargi (pas urgent pour la présentation au ministère) : tier
+Supabase Pro, alertes d'usage Mapbox/xAI, et préparer (sans nécessairement déployer tout
+de suite) une vue d'agrégation côté serveur si la participation dépasse les attentes.
+
+---
+
+## Plan de sécurisation — anti-abus, piratage, scraping (23 juin 2026)
+
+**Pas encore implémenté — plan seulement, à prioriser avec toi.** Complète la checklist
+"Sécurité" plus haut (déjà en bonne partie couverte côté validation serveur — bornes
+géographiques, rate limit par `user_id`, RLS stricte, voir `0004_input_guardrails.sql`)
+avec une couche réseau/anti-bot qui manque encore.
+
+**Déjà en place (vérifié dans le code actuel) :**
+- RLS sur toutes les tables, policies séparées citoyen (lecture/écriture de ses propres
+  lignes) vs admin (lecture totale via ligne dans `admins`, pas de clé `service_role`
+  côté client).
+- Validation serveur de la géométrie (bornes géographiques + max 500 points/route) et
+  rate limit de 30 soumissions/heure par `user_id` (trigger Postgres,
+  `0004_input_guardrails.sql`).
+- Filtrage FSA côté client *et* serveur (`is_valid_fsa()` + contrainte `check`).
+- Edge Functions (`generate-report`, `process-document`) vérifient l'auth + le rôle
+  admin avant tout traitement — pas d'accès anonyme à l'IA/au RAG.
+- React échappe par défaut tout texte affiché (aucun `dangerouslySetInnerHTML` dans le
+  code) — pas d'injection XSS triviale via les labels d'arrêts ou réponses de formulaire.
+- Clés sensibles (`service_role`, clé xAI) confinées aux Edge Functions, jamais dans le
+  bundle client (`VITE_*` seulement pour les clés publiques destinées au navigateur).
+
+**Manquant — à ajouter, par priorité :**
+1. **Anti-bot / CAPTCHA invisible** sur la soumission citoyenne (Cloudflare Turnstile,
+   gratuit, respectueux de la vie privée) — le rate limit actuel est par `user_id`
+   Supabase, contournable en créant des comptes anonymes en boucle (limite déjà notée
+   dans le commentaire de `0004_input_guardrails.sql`).
+2. **Cloudflare devant Netlify** (gratuit) : protection DDoS de base, règles de rate
+   limiting au niveau edge sur les routes sensibles (soumission, Edge Functions),
+   option de restriction géographique si le bruit hors région devient un problème.
+3. **En-têtes de sécurité** (CSP, X-Frame-Options, X-Content-Type-Options,
+   Referrer-Policy, Permissions-Policy) via un fichier `_headers` Netlify ou
+   `netlify.toml` — actuellement absents.
+4. **Restriction du token Mapbox** par domaine dans le compte Mapbox (le token est
+   public par design dans le bundle client, mais doit être limité aux domaines de
+   production pour empêcher la réutilisation ailleurs).
+5. **`npm audit` régulier + Dependabot/Renovate** sur les dépendances (déjà notée dans
+   la checklist "Sécurité", pas encore mise en place comme automatisation récurrente).
+6. **Monitoring/alertes** : pic anormal de soumissions, échecs RLS répétés, quotas
+   Mapbox/xAI proches de la limite — actuellement aucune alerte configurée, tout est
+   silencieux jusqu'à ce que ça casse.
+7. **Politique de rétention/suppression des données personnelles** (FSA, réponses de
+   formulaire) — encore à formaliser, item déjà ouvert dans la checklist "Sécurité".
+8. **Test de pénétration léger avant la présentation** : reprendre les items déjà listés
+   dans la semaine "18 au 20 juillet" (RLS testée avec un compte non-admin, clés
+   absentes du bundle, rate limiting testé, injection de prompt testée) et y ajouter un
+   essai de scraping (boucle de requêtes anonymes contre `saveSubmission`) pour valider
+   que le rate limit + futur Turnstile bloquent bien le scénario.
+
+---
+
+## Plan de migration application mobile (iOS/Android, bilingue) + admin web seul (23 juin 2026)
+
+**Pas encore implémenté — plan seulement.** Bonne nouvelle : une bonne partie du
+terrain est déjà préparée sans que ce soit un projet à part — `capacitor.config.ts`
+existe déjà (`appId: ca.moncton.bmt`, `appName: Build Moncton`, `webDir: dist`),
+`@capacitor/core`/`ios`/`android` sont déjà dans `package.json`, et l'app citoyenne
+utilise déjà `HashRouter` (compatible nativement avec un WebView Capacitor, pas besoin
+de routing serveur). Les dossiers natifs (`ios/`, `android/`) n'ont pas encore été
+générés (`cap add ios` / `cap add android` jamais lancés).
+
+**Portée : app citoyenne (`index.html` / `src/user`) en iOS + Android natif via
+Capacitor, bilingue (déjà géré par `src/lib/lang.ts`). L'app admin (`admin.html` /
+`src/admin`) reste volontairement web seul** — plus simple à patcher instantanément
+(pas de délai de revue App Store/Play Store pour un correctif), et son usage (quelques
+admins, sur ordinateur) ne justifie pas une app native.
+
+**Phase 1 — préparer le shell natif (rapide, peut se faire avant la présentation) :**
+- Finaliser le PWA existant : le manifest (`manifest.json`) est déjà lié dans
+  `index.html`, mais `registerServiceWorker()` (`registerSW.ts`, racine du repo)
+  n'est **pas appelé** depuis `src/user/main.tsx` actuellement — soit le brancher, soit
+  le retirer s'il est obsolète (à trancher).
+  Vérifier au passage : `App.tsx`, `Auth.tsx`, `FormPage4.tsx`, `Home.tsx`,
+  `LanguageChoice.tsx`, `AdminLogo.tsx` à la racine du repo semblent être des fichiers
+  legacy non utilisés par le build actuel (le vrai code vit sous `src/user` et
+  `src/admin`) — à confirmer et nettoyer pour éviter la confusion.
+- `npx cap add ios` / `npx cap add android` pour générer les projets natifs, puis
+  `npm run build:mobile` (déjà scripté) pour les garder synchronisés avec `dist/`.
+- Icônes/splash screen aux bonnes résolutions (actuellement un seul `icon.svg`) +
+  config `SplashScreen` déjà présente dans `capacitor.config.ts`.
+- Permissions natives à déclarer : géolocalisation (`GeolocateControl` utilisé dans
+  `MapPage.tsx` — nécessite une chaîne de permission `NSLocationWhenInUseUsageDescription`
+  côté iOS et la permission `ACCESS_FINE_LOCATION` côté Android, configurées via le
+  plugin Capacitor Geolocation).
+- Le travail récent sur les zones sûres (`env(safe-area-inset-*)`, fait le 23 juin sur
+  `MapPage.tsx`) profite directement à l'app native — pas de travail supplémentaire
+  pour les encoches/barres système.
+
+**Phase 2 — bilingue dans le contexte natif :**
+- Le contenu est déjà bilingue (`lang.ts`), seule la persistance du choix
+  (`localStorage`) doit être vérifiée dans le WebView Capacitor (fonctionne nativement,
+  pas de changement de code attendu).
+- Pour une vraie expérience native : détecter la langue de l'appareil au premier
+  lancement comme valeur par défaut plutôt que de toujours démarrer sur `fr`.
+- Fiches App Store / Play Store à soumettre en fr **et** en, noms et descriptions
+  localisés (`CFBundleDisplayName`/`strings.xml` si on veut aussi un nom d'app localisé,
+  optionnel).
+
+**Phase 3 — soumission aux stores (à traiter après la présentation, pas avant) :**
+- Comptes développeur : Apple Developer Program (99 $US/an) + Google Play Developer
+  (25 $US, paiement unique).
+- Politique de confidentialité publique obligatoire (collecte de géolocalisation, auth
+  anonyme) avant soumission sur les deux stores.
+- Apple est parfois strict sur les apps "wrapper WebView" — un Capacitor bien intégré
+  (apparence native, pas juste un iframe du site) passe généralement la revue, mais
+  prévoir une marge pour un premier rejet/itération.
+- Pour la démo au ministère, **pas besoin d'attendre la publication officielle** : un
+  build TestFlight (iOS) ou un APK signé installable directement (Android) suffit à
+  démontrer "c'est une vraie app mobile" sans le délai de revue des stores.
+
+**Recommandation de séquencement vu le calendrier (présentation le 20 juillet) :**
+Phase 1 peut se faire en parallèle des semaines 3-4 sans gêner le cerveau IA — c'est
+indépendant. Garder les Phases 2-3 (peaufinage + soumission stores) pour après la
+présentation, sauf si tu veux explicitement un build installable (TestFlight/APK) à
+montrer le jour J plutôt qu'une démo web — à trancher ensemble.
