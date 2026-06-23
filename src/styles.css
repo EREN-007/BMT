@@ -3370,6 +3370,196 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   ARP — Rapport IA imprimable (AdminReportPrint)
+   Document blanc style "rapport" — distinct du thème sombre de l'admin, pensé
+   pour l'impression / export PDF natif du navigateur (window.print()).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.arp-root {
+  min-height: 100dvh;
+  background: #e8e8ec;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.arp-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  padding: 12px;
+  background: #1a1a2e;
+}
+
+.arp-page {
+  max-width: 860px;
+  margin: 24px auto 60px;
+  background: white;
+  color: #1a1a2e;
+  padding: 40px 48px 56px;
+  border-radius: 4px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+}
+
+.arp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 4px solid;
+  border-image: linear-gradient(90deg, #003087 50%, #FFD700 50%) 1;
+  padding-bottom: 14px;
+  margin-bottom: 24px;
+}
+
+.arp-h-main {
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+
+.arp-h-sub {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  margin-top: 2px;
+}
+
+.arp-h-meta {
+  font-size: 0.72rem;
+  color: #888;
+  margin-top: 4px;
+}
+
+.arp-section-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #003087;
+  margin: 26px 0 8px;
+}
+
+.arp-text {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #222;
+}
+
+.arp-text-muted {
+  font-size: 0.78rem;
+  color: #999;
+}
+
+.arp-map-wrap {
+  height: 320px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+}
+
+.arp-map {
+  width: 100%;
+  height: 100%;
+}
+
+.arp-kpi-row {
+  display: flex;
+  gap: 14px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+.arp-kpi {
+  flex: 1;
+  min-width: 120px;
+  background: #f5f6fa;
+  border: 1px solid #e3e5ec;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.68rem;
+  color: #666;
+  font-weight: 600;
+}
+
+.arp-kpi span {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #003087;
+  margin-bottom: 2px;
+}
+
+.arp-table-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #555;
+  margin: 12px 0 4px;
+}
+
+.arp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.arp-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #eee;
+}
+
+.arp-table .arp-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.arp-table-total td {
+  font-weight: 800;
+  border-top: 2px solid #1a1a2e;
+  border-bottom: none;
+}
+
+.arp-budget-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.arp-grand-total {
+  text-align: right;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #003087;
+  margin-top: 14px;
+}
+
+.arp-rec-list, .arp-source-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: #222;
+}
+
+.arp-footer {
+  margin-top: 36px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+  font-size: 0.68rem;
+  color: #999;
+}
+
+.arp-avoid-break {
+  break-inside: avoid;
+}
+
+@media print {
+  .arp-root    { background: white; }
+  .arp-toolbar { display: none !important; }
+  .arp-page    { box-shadow: none; margin: 0 auto; max-width: 100%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    RESULTS PAGE  (rp-*)
    Page publique — carte agrégée + stats de participation
    ═══════════════════════════════════════════════════════════════════════════ */

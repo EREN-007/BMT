@@ -316,7 +316,7 @@ opérationnel dès que la migration 0005 est appliquée.)*
      score de connectivité, comparaison aux standards de l'industrie).
   4. Intègre le budget calculé (étape déterministe, pas halluciné).
   5. Génère un rapport narratif autour des chiffres réels.
-- [ ] Template de rapport final (PDF/HTML) : résumé exécutif, carte du réseau (réutilise
+- [x] Template de rapport final (PDF/HTML) : résumé exécutif, carte du réseau (réutilise
   le rendu Mapbox existant), analyse d'équité, ventilation budgétaire, recommandations.
 - [x] Panneau "assistant IA" côté admin : poser une question ("si on change ceci...")
   et recevoir un commentaire généré à partir des données + du corpus.
@@ -345,9 +345,19 @@ la génération et affiche le résumé exécutif, les analyses, le score de conn
 recommandations et les sources du corpus utilisées, plus un encadré "assistant IA" en bas
 de l'onglet pour les questions libres — ce dernier couvre déjà l'item "Panneau assistant
 IA" même si la présentation reste simple (liste de texte, pas de mise en page soignée).
-Reste à faire : le template de rapport PDF/HTML imprimable avec mise en page (carte
-Mapbox intégrée) — actuellement le rapport n'est consultable que dans le panneau admin,
-pas exportable.
+Template imprimable : bouton "Exporter / Imprimer (PDF)" dans `TabReport` (visible une
+fois un rapport généré) qui calcule la géométrie des lignes/arrêts officiels (factorisée
+dans `buildFinalState()`, partagée avec "Générer la carte finale" pour éviter la
+duplication), l'écrit avec le `ReportResult` dans `localStorage['bmt_report_print_state']`
+(contrat `src/lib/reportPrintState.ts`, même convention que `finalState.ts`) et ouvre un
+nouvel onglet navigateur sur `/admin.html#/rapport-impression`. Cette nouvelle route
+(`src/pages/AdminReportPrint.tsx`, enregistrée dans `AdminApp.tsx`) relit ce localStorage
+et affiche un document blanc "rapport" (carte Leaflet/Mapbox compacte des lignes/arrêts,
+résumé exécutif, indicateurs clés, analyse d'équité avec tableau des zones critiques/
+modérées, analyse de connectivité, comparaison industrie, ventilation budgétaire en
+tableau capital/exploitation avec total an 1, recommandations, sources) — export PDF via
+`window.print()` natif du navigateur (pas de nouvelle dépendance, même approche que
+`AdminFinalMap`), styles `.arp-*` dans `styles.css`.
 Action manuelle requise : exécuter la migration 0007, déployer l'Edge Function
 `generate-report` (`supabase functions deploy generate-report`) et attacher un NOUVEAU
 secret `XAI_API_KEY` (`supabase secrets set XAI_API_KEY=...`), distinct de

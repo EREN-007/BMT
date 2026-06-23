@@ -19,6 +19,7 @@ import { aggregate, AggregatedCorridor, AggregatedStop, AggregationResult } from
 import { getRoutes, getStops } from '@/lib/storage'
 import { getLang, ADMIN_T } from '@/lib/lang'
 import { FinalRoute, FinalStop, FINAL_STATE_KEY } from '@/lib/finalState'
+import { REPORT_PRINT_STATE_KEY } from '@/lib/reportPrintState'
 import { buildReportSummary, generateReport, askAssistant, ReportResult, AssistantAnswer } from '@/lib/report'
 
 const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
@@ -143,6 +144,59 @@ function nearbyStopIds(route: SimRoute, stops: SimStop[], radiusM = 400): string
     if (near) ids.push(stop.id)
   }
   return ids
+}
+
+// Géométrie des lignes/arrêts officiels — partagée entre "Générer la carte finale"
+// (AdminFinalMap) et l'export imprimable du rapport IA (AdminReportPrint), qui ont
+// tous deux besoin du même tracé pour leur carte.
+function buildFinalState(
+  routes: SimRoute[], stops: SimStop[], ridershipResult: RidershipResult | null,
+): { routes: FinalRoute[]; stops: FinalStop[] } {
+  const activeRoutes = routes.filter(r => r.active)
+  const dailyRiders   = (id: string) => ridershipResult?.routes.find(x => x.routeId === id)?.dailyRiders ?? 0
+  const topRidership  = activeRoutes.length > 0 ? Math.max(...activeRoutes.map(r => dailyRiders(r.id))) : 0
+
+  const finalRoutes: FinalRoute[] = activeRoutes.map((r, i) => {
+    const number   = String((i + 1) * 10)
+    const rid      = dailyRiders(r.id)
+    const servedIds = nearbyStopIds(r, stops, COVERAGE_RADIUS)
+    const servedLbl = servedIds
+      .map(id => stops.find(s => s.id === id)?.label)
+      .filter((l): l is string => !!l)
+    return {
+      id: r.id, number,
+      labelFR: `Ligne ${number} — ${r.label}`,
+      labelEN: `Route ${number} — ${r.label}`,
+      color: r.color,
+      type: topRidership > 0 && rid === topRidership ? 'Principal' : 'Secondaire',
+      frequency: rid >= 500 ? '15 min' : rid >= 250 ? '20 min' : '30 min',
+      ridership: rid,
+      points: r.points,
+      midpoint: r.points[Math.floor(r.points.length / 2)],
+      stops: servedLbl,
+    }
+  })
+
+  const stopRouteNumbers = new Map<string, string[]>()
+  activeRoutes.forEach((r, i) => {
+    const number = String((i + 1) * 10)
+    nearbyStopIds(r, stops, COVERAGE_RADIUS).forEach(stopId => {
+      const list = stopRouteNumbers.get(stopId) ?? []
+      list.push(number)
+      stopRouteNumbers.set(stopId, list)
+    })
+  })
+
+  const finalStops: FinalStop[] = stops
+    .filter(s => stopRouteNumbers.has(s.id))
+    .map(s => ({
+      id: s.id, label: s.label, labelEN: s.label,
+      type: s.type === 'station' ? 'station' : 'regular',
+      pos: s.pos, accessible: true,
+      routes: stopRouteNumbers.get(s.id) ?? [],
+    }))
+
+  return { routes: finalRoutes, stops: finalStops }
 }
 
 // ─── Calcul des métriques de couverture ───────────────────────────────────────
@@ -841,7 +895,7 @@ function TabBudget({
 // ─── Tab : Rapport IA (agent generate-report, semaine 4) ──────────────────────
 
 function TabReport({
-  canGenerate, report, reportLoading, reportError, onGenerate,
+  canGenerate, report, reportLoading, reportError, onGenerate, onExport,
   question, onQuestionChange, answer, askLoading, askError, onAsk,
 }: {
   canGenerate: boolean
@@ -849,6 +903,7 @@ function TabReport({
   reportLoading: boolean
   reportError: boolean
   onGenerate: () => void
+  onExport: () => void
   question: string
   onQuestionChange: (v: string) => void
   answer: AssistantAnswer | null
@@ -889,6 +944,14 @@ function TabReport({
 
       {report && (
         <>
+          <button
+            className="sim-btn"
+            style={{ width: '100%', marginTop: 8 }}
+            onClick={onExport}
+          >
+            {t.reportExport}
+          </button>
+
           <div className="sim-total-card" style={{ marginTop: 12 }}>
             <div className="sim-total-value">{report.narrative.connectivity_score}/100</div>
             <div className="sim-total-label">{t.reportConnectivity}</div>
@@ -1115,50 +1178,7 @@ function AdminSimulator({ onLogout }: Props) {
   }
 
   const handleGenerateFinal = useCallback(() => {
-    const activeRoutes = routes.filter(r => r.active)
-    const dailyRiders   = (id: string) => ridershipResult?.routes.find(x => x.routeId === id)?.dailyRiders ?? 0
-    const topRidership  = activeRoutes.length > 0 ? Math.max(...activeRoutes.map(r => dailyRiders(r.id))) : 0
-
-    const finalRoutes: FinalRoute[] = activeRoutes.map((r, i) => {
-      const number   = String((i + 1) * 10)
-      const rid      = dailyRiders(r.id)
-      const servedIds = nearbyStopIds(r, stops, COVERAGE_RADIUS)
-      const servedLbl = servedIds
-        .map(id => stops.find(s => s.id === id)?.label)
-        .filter((l): l is string => !!l)
-      return {
-        id: r.id, number,
-        labelFR: `Ligne ${number} — ${r.label}`,
-        labelEN: `Route ${number} — ${r.label}`,
-        color: r.color,
-        type: topRidership > 0 && rid === topRidership ? 'Principal' : 'Secondaire',
-        frequency: rid >= 500 ? '15 min' : rid >= 250 ? '20 min' : '30 min',
-        ridership: rid,
-        points: r.points,
-        midpoint: r.points[Math.floor(r.points.length / 2)],
-        stops: servedLbl,
-      }
-    })
-
-    const stopRouteNumbers = new Map<string, string[]>()
-    activeRoutes.forEach((r, i) => {
-      const number = String((i + 1) * 10)
-      nearbyStopIds(r, stops, COVERAGE_RADIUS).forEach(stopId => {
-        const list = stopRouteNumbers.get(stopId) ?? []
-        list.push(number)
-        stopRouteNumbers.set(stopId, list)
-      })
-    })
-
-    const finalStops: FinalStop[] = stops
-      .filter(s => stopRouteNumbers.has(s.id))
-      .map(s => ({
-        id: s.id, label: s.label, labelEN: s.label,
-        type: s.type === 'station' ? 'station' : 'regular',
-        pos: s.pos, accessible: true,
-        routes: stopRouteNumbers.get(s.id) ?? [],
-      }))
-
+    const { routes: finalRoutes, stops: finalStops } = buildFinalState(routes, stops, ridershipResult)
     localStorage.setItem(FINAL_STATE_KEY, JSON.stringify({
       routes: finalRoutes,
       stops: finalStops,
@@ -1212,6 +1232,15 @@ function AdminSimulator({ onLogout }: Props) {
       .catch(err => { console.error('generateReport failed', err); setReportError(true) })
       .finally(() => setReportLoading(false))
   }, [equityResult, odMatrix, ridershipResult, budgetResult, aggResult])
+
+  const handleExportReport = useCallback(() => {
+    if (!report) return
+    const { routes: finalRoutes, stops: finalStops } = buildFinalState(routes, stops, ridershipResult)
+    localStorage.setItem(REPORT_PRINT_STATE_KEY, JSON.stringify({
+      report, routes: finalRoutes, stops: finalStops,
+    }))
+    window.open('/admin.html#/rapport-impression', '_blank')
+  }, [report, routes, stops, ridershipResult])
 
   const handleAsk = useCallback(() => {
     if (!equityResult || !odMatrix || !ridershipResult || !budgetResult || !aggResult || !question.trim()) return
@@ -1515,6 +1544,7 @@ function AdminSimulator({ onLogout }: Props) {
             reportLoading={reportLoading}
             reportError={reportError}
             onGenerate={handleGenerateReport}
+            onExport={handleExportReport}
             question={question}
             onQuestionChange={setQuestion}
             answer={answer}
