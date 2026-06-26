@@ -347,6 +347,83 @@
   50%      { filter: drop-shadow(0 3px 8px rgba(0,0,0,0.6)) drop-shadow(0 0 6px rgba(255,80,60,0.8)); }
 }
 
+/* ── Recherche de lieu (Nominatim — barre de recherche citoyenne) ── */
+.mp-search-wrap {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 14px) + 10px);
+  left: 10px;
+  z-index: 200;
+}
+.mp-search-trigger {
+  width: 42px; height: 42px;
+  background: rgba(10, 22, 40, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  color: rgba(255,255,255,0.75);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  transition: background 0.15s;
+}
+.mp-search-trigger:hover { background: rgba(10,22,40,0.98); color: white; }
+.mp-search-trigger svg   { width: 18px; height: 18px; }
+
+.mp-search-box {
+  position: relative;
+  width: min(296px, calc(100vw - 100px));
+  background: rgba(10, 22, 40, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  display: flex; align-items: center;
+  padding: 0 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+}
+.mp-search-icon { width: 16px; height: 16px; color: rgba(255,255,255,0.4); flex-shrink: 0; }
+.mp-search-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: white; font-size: 0.85rem; padding: 11px 8px;
+}
+.mp-search-input::placeholder { color: rgba(255,255,255,0.32); }
+.mp-search-close {
+  width: 28px; height: 28px; background: transparent; border: none; cursor: pointer;
+  color: rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center;
+  border-radius: 7px; flex-shrink: 0; transition: background 0.12s;
+}
+.mp-search-close:hover { background: rgba(255,255,255,0.1); color: white; }
+.mp-search-close svg { width: 14px; height: 14px; }
+
+.mp-search-results {
+  position: absolute;
+  top: calc(100% + 6px); left: 0; right: 0;
+  background: rgba(10, 22, 40, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.mp-search-result {
+  display: flex; align-items: flex-start; gap: 10px;
+  width: 100%; padding: 10px 14px;
+  background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer; color: rgba(255,255,255,0.85); text-align: left;
+  font-size: 0.78rem; line-height: 1.4;
+  transition: background 0.12s;
+}
+.mp-search-result:last-child { border-bottom: none; }
+.mp-search-result:hover { background: rgba(255,255,255,0.08); color: white; }
+.mp-search-result svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; color: #FFD700; }
+.mp-search-status {
+  padding: 12px 14px; font-size: 0.78rem; color: rgba(255,255,255,0.4);
+}
+
 /* ── Contrôles natifs Mapbox (zoom / boussole / géolocalisation) ──
    Thème sombre assorti à l'interface + respect des zones sûres mobiles. */
 .mp-root .mapboxgl-ctrl-top-right {
@@ -3120,6 +3197,26 @@ body {
 }
 
 /* ── Bloc révision ────────────────────────────────────────────────────────── */
+
+/* Légende isochrones couverture piétonne */
+.fm-iso-legend {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0 4px;
+}
+.fm-iso-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.65);
+}
+.fm-iso-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
 
 .fm-revision-block {
   margin-top: 12px;

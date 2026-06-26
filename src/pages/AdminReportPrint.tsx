@@ -7,8 +7,9 @@ import { getLang, ADMIN_T } from '@/lib/lang'
 import { ReportPrintState, REPORT_PRINT_STATE_KEY } from '@/lib/reportPrintState'
 import { FinalRoute, FinalStop } from '@/lib/finalState'
 
-const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
-const MB_STYLE  = `https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=${MB_TOKEN}`
+// Carto Positron — fond clair, adapté à l'impression, sans clé
+const CARTO_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'
+const CARTO_ATTR  = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
 const MONCTON_CENTER: [number, number] = [46.075, -64.760]
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -27,8 +28,8 @@ function routeBadge(number: string, color: string) {
   return L.divIcon({
     html: `<div style="background:${color};color:white;font-weight:900;font-size:11px;
       width:22px;height:22px;border-radius:50%;display:flex;align-items:center;
-      justify-content:center;border:2px solid white;
-      box-shadow:0 1px 5px rgba(0,0,0,0.4);font-family:sans-serif;">${number}</div>`,
+      justify-content:center;border:2px solid rgba(255,255,255,0.9);
+      box-shadow:0 1px 6px rgba(0,0,0,0.35);font-family:sans-serif;">${number}</div>`,
     className: '', iconSize: [22, 22], iconAnchor: [11, 11],
   })
 }
@@ -42,10 +43,11 @@ function NetworkMap({ routes }: { routes: FinalRoute[] }) {
     <div className="arp-map-wrap">
       <MapContainer center={MONCTON_CENTER} zoom={13} className="arp-map" zoomControl={false} dragging={false} scrollWheelZoom={false}>
         <FitToRoutes routes={routes} />
-        <TileLayer url={MB_STYLE} attribution='&copy; <a href="https://mapbox.com">Mapbox</a>' tileSize={512} zoomOffset={-1} />
+        <TileLayer url={CARTO_LIGHT} attribution={CARTO_ATTR} subdomains={['a','b','c','d']} />
         {routes.map(r => (
           <React.Fragment key={r.id}>
-            <Polyline positions={r.points} pathOptions={{ color: 'white', weight: 9, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }} />
+            {/* Contour neutre pour séparer les lignes superposées */}
+            <Polyline positions={r.points} pathOptions={{ color: 'white', weight: 9, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }} />
             <Polyline positions={r.points} pathOptions={{ color: r.color, weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' }} />
           </React.Fragment>
         ))}

@@ -14,6 +14,31 @@ const MONCTON    = { longitude: -64.760, latitude: 46.075, zoom: 13, pitch: 45, 
 // [lat,lng] → [lng,lat] (storage vs Mapbox convention)
 const toLngLat = ([lat, lng]: [number, number]): [number, number] => [lng, lat]
 
+// ─── Nominatim (OpenStreetMap geocoding — gratuit, sans clé) ─────────────────
+interface NominatimResult {
+  place_id: number
+  display_name: string
+  lat: string
+  lon: string
+}
+
+async function searchNominatim(q: string, lang: string): Promise<NominatimResult[]> {
+  const headers = { 'Accept-Language': lang === 'fr' ? 'fr,en' : 'en,fr' }
+  // 1er essai : borné au Grand Moncton
+  const bounded = await fetch(
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}` +
+    `&format=json&limit=5&viewbox=-64.91,46.18,-64.63,45.99&bounded=1&countrycodes=ca`,
+    { headers },
+  ).then(r => r.json() as Promise<NominatimResult[]>).catch(() => [] as NominatimResult[])
+  if (bounded.length > 0) return bounded
+  // Repli : cherche "q Moncton" au Canada sans bbox
+  return fetch(
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ' Moncton')}` +
+    `&format=json&limit=5&countrycodes=ca`,
+    { headers },
+  ).then(r => r.json() as Promise<NominatimResult[]>).catch(() => [] as NominatimResult[])
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Tool = 'pencil' | 'eraser' | 'busstop' | 'station'
@@ -352,6 +377,42 @@ function MapPage() {
   const snapTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSnappedCountRef = useRef<Record<string, number>>({})
 
+  // ── Recherche de lieu (Nominatim) ─────────────────────────────────────────
+  const [searchOpen,    setSearchOpen]    = useState(false)
+  const [searchQuery,   setSearchQuery]   = useState('')
+  const [searchResults, setSearchResults] = useState<NominatimResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const searchInputRef  = useRef<HTMLInputElement>(null)
+  const searchDebounce  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSearchInput = useCallback((q: string) => {
+    setSearchQuery(q)
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    if (!q.trim()) { setSearchResults([]); return }
+    searchDebounce.current = setTimeout(async () => {
+      setSearchLoading(true)
+      const results = await searchNominatim(q, lang)
+      setSearchResults(results)
+      setSearchLoading(false)
+    }, 400)
+  }, [lang])
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchQuery('')
+    setSearchResults([])
+  }, [])
+
+  const flyToResult = useCallback((r: NominatimResult) => {
+    mapRef.current?.flyTo({
+      center: [parseFloat(r.lon), parseFloat(r.lat)],
+      zoom: 16,
+      duration: 800,
+      essential: true,
+    })
+    closeSearch()
+  }, [closeSearch])
+
   // ── Auto-save brouillon à chaque modification ─────────────────────────────
   useEffect(() => { saveDraft(routes, stops) }, [routes, stops])
 
@@ -651,6 +712,64 @@ function MapPage() {
           </Marker>
         ))}
       </Map>
+
+      {/* ── Recherche de lieu (Nominatim) ── */}
+      <div className="mp-search-wrap">
+        {!searchOpen ? (
+          <button
+            className="mp-search-trigger"
+            onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 80) }}
+            title={t.searchPlaceholder}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+          </button>
+        ) : (
+          <div className="mp-search-box">
+            <svg className="mp-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              ref={searchInputRef}
+              className="mp-search-input"
+              type="text"
+              placeholder={t.searchPlaceholder}
+              value={searchQuery}
+              onChange={e => handleSearchInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') closeSearch()
+                if (e.key === 'Enter' && searchResults.length > 0) flyToResult(searchResults[0])
+              }}
+              autoComplete="off"
+            />
+            <button className="mp-search-close" onClick={closeSearch}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+            {(searchLoading || searchResults.length > 0 || (searchQuery.length > 2 && !searchLoading)) && (
+              <div className="mp-search-results">
+                {searchLoading && <div className="mp-search-status">…</div>}
+                {!searchLoading && searchResults.map(r => (
+                  <button key={r.place_id} className="mp-search-result" onClick={() => flyToResult(r)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                      <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <span>{r.display_name}</span>
+                  </button>
+                ))}
+                {!searchLoading && searchResults.length === 0 && searchQuery.length > 2 && (
+                  <div className="mp-search-status">{t.searchNoResults}</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── Badge brouillon restauré ── */}
       {showDraftBadge && (

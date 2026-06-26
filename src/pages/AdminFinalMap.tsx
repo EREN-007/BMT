@@ -1,16 +1,39 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MapContainer, TileLayer, Polyline, Popup, Marker, useMap,
+  MapContainer, TileLayer, Polyline, Popup, Marker, GeoJSON as LeafletGeoJSON, useMap,
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getLang, ADMIN_T } from '@/lib/lang'
 import { useEffect } from 'react'
 import { FinalRoute, FinalStop, FinalState, FINAL_STATE_KEY } from '@/lib/finalState'
+import type { PathOptions } from 'leaflet'
 
 const MB_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string
 const MB_STYLE  = `https://api.mapbox.com/styles/v1/erenjager/cmo26m3v5004l01rufhpcgo8b/tiles/256/{z}/{x}/{y}@2x?access_token=${MB_TOKEN}`
+
+// ─── Isochrones de couverture piétonne (Mapbox Isochrone API) ─────────────────
+// Appelée uniquement sur les arrêts terminus/station pour limiter les requêtes
+async function fetchIsochroneCoverage(stops: FinalStop[]): Promise<GeoJSON.FeatureCollection> {
+  const keyStops = stops.filter(s => s.type === 'terminus' || s.type === 'station')
+  const fetches  = keyStops.map(async s => {
+    const [lat, lng] = s.pos
+    const url =
+      `https://api.mapbox.com/isochrone/v1/mapbox/walking/${lng},${lat}` +
+      `?contours_minutes=5,10,15&polygons=true&denoise=1&access_token=${MB_TOKEN}`
+    const res = await fetch(url)
+    if (!res.ok) return null
+    return res.json() as Promise<GeoJSON.FeatureCollection>
+  })
+  const results  = await Promise.all(fetches)
+  // Tri : les plus grandes zones (15 min) en premier pour le rendu Leaflet
+  const features = results
+    .filter((fc): fc is GeoJSON.FeatureCollection => fc !== null)
+    .flatMap(fc => fc.features)
+    .sort((a, b) => ((b.properties?.contour ?? 0) - (a.properties?.contour ?? 0)))
+  return { type: 'FeatureCollection', features }
+}
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 
@@ -209,8 +232,36 @@ function AdminFinalMap({ onLogout }: Props) {
   const navigate = useNavigate()
   const lang     = getLang()
   const t        = ADMIN_T[lang]
-  const [submitted, setSubmitted]       = useState(false)
-  const [showBoundaries, setShowBound]  = useState(true)
+  const [submitted, setSubmitted]           = useState(false)
+  const [showBoundaries, setShowBound]      = useState(true)
+  const [showIsochrones, setShowIsochrones] = useState(false)
+  const [isochroneData,  setIsochroneData]  = useState<GeoJSON.FeatureCollection | null>(null)
+  const [isoLoading,     setIsoLoading]     = useState(false)
+
+  const handleToggleIsochrones = async () => {
+    if (showIsochrones) { setShowIsochrones(false); return }
+    if (isochroneData)  { setShowIsochrones(true);  return }
+    setIsoLoading(true)
+    try {
+      const data = await fetchIsochroneCoverage(stops)
+      setIsochroneData(data)
+      setShowIsochrones(true)
+    } catch { /* API unreachable — silencieux */ }
+    finally { setIsoLoading(false) }
+  }
+
+  const isoStyle = (feature?: GeoJSON.Feature): PathOptions => {
+    const min = (feature?.properties?.contour ?? 15) as number
+    const fill: Record<number, string>  = { 5: '#2ecc71', 10: '#f39c12', 15: '#e74c3c' }
+    const fo:   Record<number, number>  = { 5: 0.28,     10: 0.18,      15: 0.10 }
+    return {
+      fillColor:   fill[min] ?? '#888',
+      fillOpacity: fo[min]   ?? 0.10,
+      color:       fill[min] ?? '#888',
+      weight:      1,
+      opacity:     0.35,
+    }
+  }
 
   // Chargement depuis localStorage (sauvegardé par AdminSimulator au clic sur
   // "Générer la carte finale") — repli sur les données de démonstration si absent,
@@ -299,6 +350,15 @@ function AdminFinalMap({ onLogout }: Props) {
             tileSize={512}
             zoomOffset={-1}
           />
+
+          {/* Isochrones couverture piétonne — 5 / 10 / 15 min à pied */}
+          {showIsochrones && isochroneData && (
+            <LeafletGeoJSON
+              key={isochroneData.features.length}
+              data={isochroneData}
+              style={isoStyle}
+            />
+          )}
 
           {/* Limites municipales */}
           {showBoundaries && <>
@@ -458,6 +518,34 @@ function AdminFinalMap({ onLogout }: Props) {
               {showBoundaries ? 'ON' : 'OFF'}
             </button>
           </label>
+
+          <label className="sim-toggle-row">
+            <span style={{ fontSize:'0.78rem' }}>
+              {lang === 'fr' ? 'Couverture piétonne' : 'Walking coverage'}
+              <span style={{ display:'block', fontSize:'0.67rem', color:'rgba(255,255,255,0.4)' }}>
+                {lang === 'fr' ? '5 · 10 · 15 min à pied' : '5 · 10 · 15 min walk'}
+              </span>
+            </span>
+            <button
+              className={`sim-toggle ${showIsochrones ? 'sim-toggle-on' : ''}`}
+              onClick={handleToggleIsochrones}
+              disabled={isoLoading}
+            >
+              {isoLoading ? '…' : showIsochrones ? 'ON' : 'OFF'}
+            </button>
+          </label>
+
+          {/* Légende isochrones — visible seulement quand actif */}
+          {showIsochrones && (
+            <div className="fm-iso-legend">
+              {[['#2ecc71','5 min'],['#f39c12','10 min'],['#e74c3c','15 min']].map(([c,l]) => (
+                <div key={l} className="fm-iso-legend-row">
+                  <div className="fm-iso-dot" style={{ background: c }} />
+                  <span>{l}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Bloc révision */}
           <div className="fm-revision-block">
